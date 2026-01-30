@@ -142,3 +142,6 @@ Thumbs.db
 
 # Ignore models and keys
 models/
+
+# Ignore data and database
+data/
