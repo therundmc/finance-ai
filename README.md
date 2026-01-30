@@ -56,7 +56,7 @@ docker compose up --build
 This will start all services: analysis, dashboard, mail, and portfolio tracker.
 
 ### 4. Access the Dashboard
-Open your browser and go to: [http://localhost:5000](http://localhost:5000)
+Open your browser and go to: [http://localhost:8888](http://localhost:8888)
 
 ## Usage
 - Place your data files in the `app/data/` directory (ignored by git).
