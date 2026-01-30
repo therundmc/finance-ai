@@ -1,4 +1,4 @@
-"""Module d'analyse IA - Version Claude API (remplace Ollama)"""
+"""Module d'analyse IA - Approche Hybride Claude (Haiku → Sonnet)"""
 import time
 import json
 import requests
@@ -11,14 +11,12 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 
 def call_claude_api(prompt, model, max_tokens=256, temperature=0.2, system_prompt=None):
-    """
-    Appelle l'API Claude (remplace ollama.chat)
-    
-    Returns:
-        tuple: (response_text, elapsed_time)
-    """
+    """Appelle l'API Claude - Fonction de base"""
     if not ANTHROPIC_API_KEY:
-        raise ValueError("❌ ANTHROPIC_API_KEY manquante dans l'environnement (.env)")
+        raise ValueError("❌ ANTHROPIC_API_KEY manquante dans .env")
+    
+    if not ANTHROPIC_API_KEY.startswith('sk-ant-'):
+        raise ValueError(f"❌ ANTHROPIC_API_KEY invalide (doit commencer par 'sk-ant-'). Actuellement: {ANTHROPIC_API_KEY[:10]}...")
     
     start_time = time.time()
     
@@ -32,9 +30,7 @@ def call_claude_api(prompt, model, max_tokens=256, temperature=0.2, system_promp
         "model": model,
         "max_tokens": max_tokens,
         "temperature": temperature,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
+        "messages": [{"role": "user", "content": prompt}]
     }
     
     if system_prompt:
@@ -47,73 +43,146 @@ def call_claude_api(prompt, model, max_tokens=256, temperature=0.2, system_promp
         elapsed_time = time.time() - start_time
         text = result["content"][0]["text"] if "content" in result else ""
         return text, elapsed_time
+    except requests.exceptions.HTTPError as e:
+        # Erreur HTTP détaillée
+        error_detail = ""
+        try:
+            error_detail = response.json()
+        except:
+            error_detail = response.text
+        print(f"❌ Erreur API Claude ({response.status_code}): {error_detail}")
+        return "", 0
     except requests.exceptions.RequestException as e:
         print(f"❌ Erreur API Claude: {e}")
         return "", 0
 
 
-# JSON Schema pour la réponse structurée (gardé identique)
-ANALYSIS_JSON_SCHEMA = {
-    "signal": "ACHETER | VENDRE | CONSERVER",
-    "conviction": "Forte | Moyenne | Faible",
-    "resume": "Une phrase de synthèse",
-    "analyse_technique": {
-        "tendance": "Haussière | Baissière | Neutre",
-        "rsi_interpretation": "description",
-        "macd_interpretation": "description",
-        "volatilite": "description"
-    },
-    "analyse_fondamentale": {
-        "valorisation": "description",
-        "points_forts": ["liste"],
-        "points_faibles": ["liste"]
-    },
-    "catalyseurs": [{"type": "positif|négatif", "description": "texte"}],
-    "risques": ["liste des risques"],
-    "niveaux": {
-        "achat_recommande": 0.0,
-        "stop_loss": 0.0,
-        "objectif_1": 0.0,
-        "objectif_2": 0.0
-    },
-    "conclusion": "Synthèse finale"
-}
+# ============================================================================
+# PHASE 1: SCREENING RAPIDE (HAIKU)
+# ============================================================================
 
+def build_screening_prompt(ticker, analysis_data, current_price, monthly_change):
+    """Construit prompt CONCIS pour screening Haiku"""
+    info = analysis_data.get('info', {})
+    news = analysis_data.get('news', [])
+    
+    company = info.get('longName', ticker)
+    sector = info.get('sector', 'N/A')
+    pe = info.get('trailingPE', 'N/A')
+    recommendation = info.get('recommendationKey', 'N/A')
+    
+    prompt = f"""Screening rapide: {ticker} ({company})
+
+DONNÉES:
+• Secteur: {sector}
+• Prix: {current_price:.2f}$
+• Var 1 mois: {monthly_change:+.2f}%
+• P/E: {pe}
+• Consensus: {recommendation}
+• News: {len(news)} articles récents
+
+INSTRUCTIONS:
+Fournis un screening en 3 lignes MAX:
+1. SCORE: X/100
+2. FLAG: À APPROFONDIR (si ≥60) OU RAS (si <60)
+3. RAISON: 1 phrase justifiant
+
+Sois objectif et concis."""
+    
+    return prompt
+
+
+def screen_with_haiku(ticker, analysis_data, current_price, monthly_change):
+    """
+    Phase 1: Screening rapide avec Haiku
+    
+    Returns:
+        dict: {
+            'score': int,
+            'flag': str,
+            'reason': str,
+            'should_analyze': bool
+        }
+    """
+    from config import CLAUDE_CONFIG
+    
+    print(f"  🔍 Screening Haiku...", end=" ")
+    
+    prompt = build_screening_prompt(ticker, analysis_data, current_price, monthly_change)
+    
+    haiku_config = CLAUDE_CONFIG['screening']
+    system_prompt = """Tu es un analyste quantitatif.
+Fournis un screening objectif en 3 lignes: SCORE, FLAG, RAISON."""
+    
+    response, elapsed = call_claude_api(
+        prompt=prompt,
+        model=haiku_config['model'],
+        max_tokens=haiku_config['max_tokens'],
+        temperature=haiku_config['temperature'],
+        system_prompt=system_prompt
+    )
+    
+    # Parser réponse
+    score = 50
+    flag = 'RAS'
+    reason = response
+    
+    lines = response.strip().split('\n')
+    for line in lines:
+        line_upper = line.upper()
+        if 'SCORE' in line_upper or '/100' in line:
+            import re
+            match = re.search(r'(\d+)(?:/100)?', line)
+            if match:
+                score = int(match.group(1))
+        elif 'FLAG' in line_upper:
+            if 'APPROFONDIR' in line_upper:
+                flag = 'À APPROFONDIR'
+        elif 'RAISON' in line_upper:
+            reason = line.split(':', 1)[-1].strip()
+    
+    should_analyze = (score >= 60 and flag == 'À APPROFONDIR')
+    
+    print(f"Score: {score}/100 - {flag} ({elapsed:.1f}s)")
+    
+    return {
+        'score': score,
+        'flag': flag,
+        'reason': reason,
+        'should_analyze': should_analyze,
+        'screening_time': elapsed
+    }
+
+
+# ============================================================================
+# PHASE 2: ANALYSE APPROFONDIE (SONNET) - PROMPTS
+# ============================================================================
 
 def build_analysis_prompt(ticker, hist_1mo, info, indicators, advanced=False, 
-                          news=None, calendar=None, recommendations=None):
+                          news=None, calendar=None, recommendations=None,
+                          alpha_vantage=None, fred_macro=None):
     """
-    Construit un prompt structuré pour l'analyse (IDENTIQUE à l'original)
+    Construit prompt COMPLET pour analyse Sonnet
+    Ajoute alpha_vantage et fred_macro aux paramètres existants
     """
     
-    # === DONNÉES DE BASE ===
     current_price = hist_1mo['Close'].iloc[-1] if not hist_1mo.empty else 0
     open_price = hist_1mo['Open'].iloc[-1] if not hist_1mo.empty else 0
-    high_price = hist_1mo['High'].iloc[-1] if not hist_1mo.empty else 0
-    low_price = hist_1mo['Low'].iloc[-1] if not hist_1mo.empty else 0
     volume = hist_1mo['Volume'].iloc[-1] if not hist_1mo.empty else 0
     
-    # Variation sur le mois
     if len(hist_1mo) >= 2:
-        monthly_change = ((current_price - hist_1mo['Close'].iloc[0]) / 
-                          hist_1mo['Close'].iloc[0] * 100)
+        monthly_change = ((current_price - hist_1mo['Close'].iloc[0]) / hist_1mo['Close'].iloc[0] * 100)
     else:
         monthly_change = 0
     
-    # === INFORMATIONS ENTREPRISE ===
     company_name = info.get('longName', ticker)
     sector = info.get('sector', 'N/A')
-    industry = info.get('industry', 'N/A')
     market_cap = info.get('marketCap', 0)
     pe_ratio = info.get('trailingPE', 'N/A')
-    forward_pe = info.get('forwardPE', 'N/A')
-    peg_ratio = info.get('pegRatio', 'N/A')
     dividend_yield = info.get('dividendYield', 0)
-    beta = info.get('beta', 'N/A')
     target_price = info.get('targetMeanPrice', 'N/A')
     recommendation = info.get('recommendationKey', 'N/A')
     
-    # Formatage market cap
     if market_cap and market_cap > 0:
         if market_cap >= 1e12:
             market_cap_str = f"{market_cap/1e12:.2f}T$"
@@ -124,169 +193,93 @@ def build_analysis_prompt(ticker, hist_1mo, info, indicators, advanced=False,
     else:
         market_cap_str = "N/A"
     
-    # === CONSTRUCTION DU PROMPT ===
-    prompt = f"""# ANALYSE FINANCIÈRE PROFESSIONNELLE - {ticker}
-Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+    prompt = f"""# ANALYSE FINANCIÈRE - {ticker}
 
-## INSTRUCTIONS
-Tu es un analyste financier senior. Analyse les données suivantes et fournis une recommandation claire et actionnable.
+## PROFIL
+- **{company_name}**
+- Secteur: {sector}
+- Cap: {market_cap_str}
 
-**FORMAT DE RÉPONSE OBLIGATOIRE:**
-1. Commence TOUJOURS par une ligne: `SIGNAL: [ACHETER/VENDRE/CONSERVER]`
-2. Puis une ligne: `CONVICTION: [Forte/Moyenne/Faible]`
-3. Puis une ligne: `RÉSUMÉ: [Une phrase de synthèse]`
-4. Ensuite ton analyse détaillée
+## PRIX
+- Actuel: {current_price:.2f}$
+- Var 1M: {monthly_change:+.2f}%
+- Volume: {volume:,.0f}
 
----
+## VALORISATION
+- P/E: {pe_ratio}
+- Dividende: {f"{dividend_yield*100:.2f}%" if dividend_yield else "N/A"}
+- Target: {f"{target_price:.2f}$" if isinstance(target_price, (int, float)) else target_price}
+- Consensus: {recommendation}
 
-## 1. PROFIL DE L'ENTREPRISE
-- **Nom:** {company_name}
-- **Secteur:** {sector}
-- **Industrie:** {industry}
-- **Capitalisation:** {market_cap_str}
-- **Beta:** {beta}
-
-## 2. DONNÉES DE PRIX (Dernière séance)
-- **Prix actuel:** {current_price:.2f}$
-- **Ouverture:** {open_price:.2f}$
-- **Plus haut:** {high_price:.2f}$
-- **Plus bas:** {low_price:.2f}$
-- **Volume:** {volume:,.0f}
-- **Variation mensuelle:** {monthly_change:+.2f}%
-
-## 3. VALORISATION
-- **P/E (TTM):** {pe_ratio}
-- **P/E Forward:** {forward_pe}
-- **PEG Ratio:** {peg_ratio}
-- **Rendement dividende:** {f"{dividend_yield*100:.2f}%" if dividend_yield else "N/A"}
-- **Objectif analystes:** {f"{target_price:.2f}$" if isinstance(target_price, (int, float)) else target_price}
-- **Consensus:** {recommendation}
-
-## 4. INDICATEURS TECHNIQUES
+## INDICATEURS TECHNIQUES
 """
     
-    # === INDICATEURS TECHNIQUES ===
     if indicators:
         rsi = indicators.get('rsi')
-        if rsi is not None:
-            rsi_signal = "SURACHETÉ ⚠️" if rsi > 70 else "SURVENDU ⚠️" if rsi < 30 else "Neutre"
-            prompt += f"- **RSI (14):** {rsi:.1f} → {rsi_signal}\n"
-        
+        if rsi:
+            prompt += f"- RSI: {rsi:.1f}\n"
         ma_20 = indicators.get('ma_20')
-        ma_50 = indicators.get('ma_50')
-        ma_200 = indicators.get('ma_200')
-        
         if ma_20:
-            ma20_pos = "AU-DESSUS ✅" if current_price > ma_20 else "EN-DESSOUS ❌"
-            prompt += f"- **MA20:** {ma_20:.2f}$ (Prix {ma20_pos})\n"
-        if ma_50:
-            ma50_pos = "AU-DESSUS ✅" if current_price > ma_50 else "EN-DESSOUS ❌"
-            prompt += f"- **MA50:** {ma_50:.2f}$ (Prix {ma50_pos})\n"
-        if ma_200:
-            ma200_pos = "AU-DESSUS ✅" if current_price > ma_200 else "EN-DESSOUS ❌"
-            prompt += f"- **MA200:** {ma_200:.2f}$ (Prix {ma200_pos})\n"
-        
+            prompt += f"- MA20: {ma_20:.2f}$ (Prix: {current_price:.2f}$)\n"
         macd = indicators.get('macd')
-        macd_signal = indicators.get('macd_signal')
-        if macd is not None and macd_signal is not None:
-            macd_trend = "HAUSSIER ✅" if macd > macd_signal else "BAISSIER ❌"
-            prompt += f"- **MACD:** {macd:.3f} | Signal: {macd_signal:.3f} → {macd_trend}\n"
-        
-        bb_upper = indicators.get('bb_upper')
-        bb_lower = indicators.get('bb_lower')
-        bb_position = indicators.get('bb_position')
-        if bb_upper and bb_lower:
-            prompt += f"- **Bollinger:** [{bb_lower:.2f}$ - {bb_upper:.2f}$]\n"
-            if bb_position is not None:
-                bb_zone = "HAUT (Surachat)" if bb_position > 80 else "BAS (Survente)" if bb_position < 20 else "Médian"
-                prompt += f"- **Position Bollinger:** {bb_position:.1f}% → {bb_zone}\n"
-        
-        stoch_k = indicators.get('stoch_k')
-        stoch_d = indicators.get('stoch_d')
-        if stoch_k is not None:
-            stoch_signal = "SURVENDU ⚠️" if stoch_k < 20 else "SURACHETÉ ⚠️" if stoch_k > 80 else "Neutre"
-            prompt += f"- **Stochastique K:** {stoch_k:.1f} → {stoch_signal}\n"
-        
-        atr = indicators.get('atr')
-        atr_pct = indicators.get('atr_percent')
-        if atr and atr_pct:
-            prompt += f"- **ATR:** {atr:.2f} ({atr_pct:.2f}% du prix) - Volatilité\n"
+        if macd:
+            prompt += f"- MACD: {macd:.3f}\n"
     
-    # === DONNÉES ENRICHIES (si mode avancé) ===
-    if advanced and news:
-        prompt += f"\n## 5. ACTUALITÉS RÉCENTES\n"
+    # NOUVEAU: Alpha Vantage
+    if alpha_vantage:
+        prompt += f"\n## FONDAMENTAUX DÉTAILLÉS\n"
+        if alpha_vantage.get('profit_margin'):
+            prompt += f"- Marge: {alpha_vantage['profit_margin']}\n"
+        if alpha_vantage.get('roe'):
+            prompt += f"- ROE: {alpha_vantage['roe']}\n"
+    
+    # NOUVEAU: FRED
+    if fred_macro:
+        prompt += f"\n## CONTEXTE MACRO\n"
+        if fred_macro.get('fed_funds_rate'):
+            prompt += f"- Taux FED: {fred_macro['fed_funds_rate']['value']}%\n"
+        if fred_macro.get('unemployment'):
+            prompt += f"- Chômage: {fred_macro['unemployment']['value']}%\n"
+    
+    if news:
+        prompt += f"\n## NEWS ({len(news)} articles)\n"
         for i, article in enumerate(news[:3], 1):
-            title = article.get('title', 'N/A')
-            pub_date = article.get('providerPublishTime', '')
-            prompt += f"{i}. **{title}**\n"
-    
-    if advanced and calendar:
-        prompt += f"\n## 6. CALENDRIER FINANCIER\n"
-        earnings = calendar.get('Earnings Date') if isinstance(calendar, dict) else None
-        if earnings:
-            prompt += f"- **Prochains résultats:** {earnings}\n"
-    
-    if advanced and recommendations is not None and not recommendations.empty:
-        prompt += f"\n## 7. RECOMMANDATIONS ANALYSTES\n"
-        recent_recos = recommendations.tail(3)
-        for _, reco in recent_recos.iterrows():
-            firm = reco.get('Firm', 'N/A')
-            action = reco.get('To Grade', reco.get('Action', 'N/A'))
-            prompt += f"- **{firm}:** {action}\n"
+            prompt += f"{i}. {article.get('title', 'N/A')}\n"
     
     prompt += """
 ---
 
-## INSTRUCTIONS FINALES
-Fournis une analyse COMPLÈTE et STRUCTURÉE avec:
-1. Signal clair (ACHETER/VENDRE/CONSERVER)
-2. Conviction (Forte/Moyenne/Faible)
-3. Résumé en 1 phrase
-4. Analyse technique détaillée
-5. Analyse fondamentale
-6. Catalyseurs et risques
-7. Niveaux d'action recommandés
-8. Conclusion synthétique
+FOURNIS:
+SIGNAL: [ACHETER/VENDRE/CONSERVER]
+CONVICTION: [Forte/Moyenne/Faible]
+RÉSUMÉ: [Une phrase]
 
-Sois précis, factuel et actionnable.
-"""
+Puis analyse détaillée."""
     
     return prompt
 
 
 def generate_analysis(ticker, model, context, num_threads=12):
     """
-    Génère l'analyse IA (INTERFACE IDENTIQUE - remplace Ollama par Claude)
-    
-    Args:
-        ticker: Symbole de l'action
-        model: Modèle à utiliser (ignoré si Claude, utilise config)
-        context: Prompt de contexte
-        num_threads: Ignoré (compatibilité Ollama)
+    FONCTION PRINCIPALE - Compatible analyzer.py
     
     Returns:
         tuple: (analysis_text, elapsed_time)
     """
     from config import CLAUDE_CONFIG
     
-    print(f"🤖 Claude Sonnet - Analyse de {ticker}...")
+    print(f"  🤖 Analyse Sonnet...", end=" ")
     
-    # Configuration Sonnet pour analyse complète
     sonnet_config = CLAUDE_CONFIG['deep_analysis']
     
-    system_prompt = """Tu es un analyste financier senior avec 15 ans d'expérience.
-Tu analyses les actions de manière approfondie en considérant:
-- L'analyse technique (tendances, niveaux clés)
-- L'analyse fondamentale (valorisation, santé financière)
-- Les actualités et catalyseurs
-- Les risques identifiables
+    system_prompt = """Tu es un analyste financier senior.
 
-Commence TOUJOURS ta réponse par:
+COMMENCE PAR:
 SIGNAL: [ACHETER/VENDRE/CONSERVER]
 CONVICTION: [Forte/Moyenne/Faible]
-RÉSUMÉ: [Une phrase claire]
+RÉSUMÉ: [Une phrase]
 
-Puis fournis ton analyse détaillée."""
+Puis analyse détaillée."""
     
     try:
         analysis_text, elapsed_time = call_claude_api(
@@ -298,153 +291,91 @@ Puis fournis ton analyse détaillée."""
         )
         
         if analysis_text:
-            print(f"✅ Analyse générée en {elapsed_time:.1f}s")
+            print(f"OK ({elapsed_time:.1f}s)")
             return analysis_text, elapsed_time
         else:
-            print(f"❌ Échec génération analyse")
+            print(f"ÉCHEC")
             return None, 0
             
     except Exception as e:
-        print(f"❌ Erreur Claude API: {e}")
+        print(f"ERREUR: {e}")
         return None, 0
 
 
+# ============================================================================
+# PORTFOLIO
+# ============================================================================
+
 def build_portfolio_analysis_prompt(positions, latest_analyses):
-    """
-    Construit le prompt pour l'analyse globale du portefeuille (IDENTIQUE)
-    """
+    """Construit prompt portfolio"""
     total_invested = sum(p.get('entry_price', 0) * p.get('quantity', 1) for p in positions)
     total_value = sum(p.get('current_price', p.get('entry_price', 0)) * p.get('quantity', 1) for p in positions)
     total_pnl = total_value - total_invested
     total_pnl_percent = (total_pnl / total_invested * 100) if total_invested > 0 else 0
     
-    prompt = f"""# ANALYSE DE PORTEFEUILLE - CONSEILS DU JOUR
-Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+    prompt = f"""# ANALYSE PORTEFEUILLE
 
-## INSTRUCTIONS
-Tu es un gestionnaire de portefeuille senior. Analyse mon portefeuille actuel et fournis:
-1. Un résumé global de la situation
-2. Des conseils actionnables pour aujourd'hui
-3. Un avis position par position
+Capital: {total_invested:,.2f}$ | Actuel: {total_value:,.2f}$ | P&L: {total_pnl:+.2f}$ ({total_pnl_percent:+.2f}%)
+Positions: {len(positions)}
 
-## APERÇU DU PORTEFEUILLE
-- **Capital investi:** {total_invested:,.2f}$
-- **Valeur actuelle:** {total_value:,.2f}$
-- **P&L Total:** {total_pnl:+,.2f}$ ({total_pnl_percent:+.2f}%)
-- **Nombre de positions:** {len(positions)}
-
-## MES POSITIONS ACTUELLES
 """
 
     for i, pos in enumerate(positions, 1):
         ticker = pos.get('ticker', 'N/A')
-        entry_price = pos.get('entry_price', 0)
-        current_price = pos.get('current_price', entry_price)
-        quantity = pos.get('quantity', 1)
-        pnl_value = pos.get('pnl_value', 0)
-        pnl_percent = pos.get('pnl_percent', 0)
+        entry = pos.get('entry_price', 0)
+        current = pos.get('current_price', entry)
+        pnl_pct = pos.get('pnl_percent', 0)
         
         analysis = latest_analyses.get(ticker, {})
         signal = analysis.get('signal', 'N/A')
-        confidence = analysis.get('confidence', 'N/A')
         
-        prompt += f"""
-### {i}. {ticker}
-- **Entrée:** {entry_price:.2f}$
-- **Prix actuel:** {current_price:.2f}$
-- **Quantité:** {quantity}
-- **P&L:** {pnl_value:+.2f}$ ({pnl_percent:+.2f}%)
-- **Signal AI récent:** {signal} (Conviction: {confidence})
-"""
+        prompt += f"{i}. {ticker}: {entry:.2f}$→{current:.2f}$ ({pnl_pct:+.2f}%) | Signal: {signal}\n"
 
     prompt += """
----
-
-## FORMAT DE RÉPONSE - JSON OBLIGATOIRE
-
-Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après.
-
-```json
-{
-  "date": "YYYY-MM-DD",
-  "resume_global": {
-    "etat_portfolio": "Sain | Attention | Critique",
-    "tendance": "Haussière | Baissière | Mixte",
-    "synthese": "Description état global",
-    "score_sante": 75
-  },
-  "actions_du_jour": {
-    "priorite_haute": ["Action 1", "Action 2"],
-    "a_surveiller": ["Point 1", "Point 2"]
-  },
-  "conseils_positions": [
-    {
-      "ticker": "XXX",
-      "action": "CONSERVER | RENFORCER | ALLEGER | VENDRE",
-      "urgence": "Haute | Moyenne | Faible",
-      "conseil": "Conseil actionnable",
-      "raison": "Justification"
-    }
-  ],
-  "conclusion": "Synthèse finale"
-}
-```
+RÉPONDS JSON:
+{"resume_global": {"etat_portfolio": "...", "score_sante": 75}, "conseils_positions": [...]}
 """
     
     return prompt
 
 
 def generate_portfolio_analysis(positions, latest_analyses, model, num_threads=12):
-    """
-    Génère l'analyse du portefeuille (INTERFACE IDENTIQUE - Claude au lieu d'Ollama)
-    
-    Returns:
-        tuple: (analyse_json, temps_écoulé)
-    """
+    """Analyse portfolio"""
     from config import CLAUDE_CONFIG
     
     if not positions:
-        print("⚠️ Aucune position ouverte à analyser")
         return None, 0
     
-    print(f"🤖 Claude Sonnet - Analyse du portefeuille ({len(positions)} positions)...")
+    print(f"🤖 Portfolio Sonnet ({len(positions)} pos)...")
     
     prompt = build_portfolio_analysis_prompt(positions, latest_analyses)
-    
     portfolio_config = CLAUDE_CONFIG['portfolio']
     
-    system_prompt = """Tu es un gestionnaire de portefeuille expérimenté.
-Tu analyses les positions d'un investisseur et fournis des conseils actionnables.
-Tu réponds UNIQUEMENT en JSON valide, sans texte avant ou après."""
-    
     try:
-        response, elapsed_time = call_claude_api(
+        response, elapsed = call_claude_api(
             prompt=prompt,
             model=portfolio_config['model'],
             max_tokens=portfolio_config['max_tokens'],
             temperature=portfolio_config['temperature'],
-            system_prompt=system_prompt
+            system_prompt="Gestionnaire portfolio. JSON uniquement."
         )
         
-        # Nettoyer les backticks markdown
-        clean_response = response.strip()
-        if clean_response.startswith('```'):
-            lines = clean_response.split('\n')
+        clean = response.strip()
+        if clean.startswith('```'):
+            lines = clean.split('\n')
             if lines[0].startswith('```'):
                 lines = lines[1:]
             if lines and lines[-1].strip() == '```':
                 lines = lines[:-1]
-            clean_response = '\n'.join(lines)
+            clean = '\n'.join(lines)
         
-        # Parser JSON
         try:
-            analysis_json = json.loads(clean_response)
-            print(f"✅ Analyse portefeuille générée en {elapsed_time:.1f}s")
-            return analysis_json, elapsed_time
-        except json.JSONDecodeError as e:
-            print(f"⚠️ Erreur parsing JSON: {e}")
-            return {'raw_response': response, 'error': 'JSON parse failed'}, elapsed_time
+            analysis_json = json.loads(clean)
+            print(f"✅ OK ({elapsed:.1f}s)")
+            return analysis_json, elapsed
+        except json.JSONDecodeError:
+            return {'raw_response': response, 'error': 'JSON parse failed'}, elapsed
             
     except Exception as e:
-        print(f"❌ Erreur analyse portefeuille: {e}")
+        print(f"❌ Erreur: {e}")
         return None, 0

@@ -12,22 +12,20 @@ ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY', '')
 
 # Configuration Claude (remplace Ollama)
+# Par défaut - peut être overridé dans config.json
 CLAUDE_CONFIG = {
-    # Screening rapide avec Haiku
     'screening': {
-        'model': 'claude-3-5-haiku-20241022',
+        'model': 'claude-haiku-4-5-20251001',  # Haiku 4.5 (latest)
         'max_tokens': 256,
         'temperature': 0.2
     },
-    # Analyse approfondie avec Sonnet
     'deep_analysis': {
-        'model': 'claude-sonnet-4-20250514',
+        'model': 'claude-sonnet-4-5-20250929',  # Sonnet 4.5 (latest)
         'max_tokens': 4000,
         'temperature': 0.3
     },
-    # Portfolio analysis
     'portfolio': {
-        'model': 'claude-sonnet-4-20250514',
+        'model': 'claude-sonnet-4-5-20250929',  # Sonnet 4.5 (latest)
         'max_tokens': 3000,
         'temperature': 0.3
     }
@@ -38,12 +36,19 @@ DEFAULT_CONFIG = {
     "save_history": True,
     "advanced_analysis": True,
     "parallel_analysis": True,
-    "num_threads": 12,  # Gardé pour compatibilité mais non utilisé avec Claude
+    "num_threads": 12,
     
-    # NOUVEAU: Configuration Claude
+    # Configuration Claude
     "use_claude": True,
-    "screening_threshold": 60,  # Score minimum pour deep analysis
+    "screening_threshold": 60,
     "max_deep_analyses_per_day": 20,
+    
+    # Modèles Claude 4.5 (latest - personnalisable)
+    "claude_models": {
+        "screening": "claude-haiku-4-5-20251001",
+        "deep_analysis": "claude-sonnet-4-5-20250929",
+        "portfolio": "claude-sonnet-4-5-20250929"
+    },
     
     "trading": {
         "buy_commission": 10.0,
@@ -58,13 +63,22 @@ def load_config(config_path='/app/config.json'):
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 config = json.load(f)
+                
+                # Merger les modèles du fichier avec CLAUDE_CONFIG
+                if 'claude_models' in config:
+                    for key, model in config['claude_models'].items():
+                        if key in CLAUDE_CONFIG:
+                            CLAUDE_CONFIG[key]['model'] = model
+                
                 print(f"✅ Configuration chargée: {len(config.get('tickers', []))} actions à surveiller")
                 
-                # Afficher le mode (Claude ou Ollama pour compatibilité)
                 if config.get('use_claude', True):
-                    print(f"🤖 Mode: Claude API (Hybride Haiku→Sonnet)")
+                    screening_model = CLAUDE_CONFIG['screening']['model']
+                    deep_model = CLAUDE_CONFIG['deep_analysis']['model']
+                    print(f"🤖 Mode: Claude API (Hybride)")
+                    print(f"   📊 Screening: {screening_model}")
+                    print(f"   🔍 Deep: {deep_model}")
                 else:
-                    # Fallback Ollama si configuré (compatibilité)
                     model = config.get('model', 'mistral-nemo')
                     print(f"🤖 Mode: Ollama Local ({model})")
                 

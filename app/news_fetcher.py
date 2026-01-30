@@ -1,5 +1,5 @@
 """
-News Fetcher - Récupération et résumé IA des actualités financières
+News Fetcher - Récupération et résumé IA des actualités financières (Claude API)
 """
 
 import os
@@ -12,7 +12,8 @@ from typing import List, Dict, Any, Optional
 
 # Configuration
 FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY', '')
-OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://ollama:11434')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 CACHE_DURATION = timedelta(minutes=30)
 
 # Tickers nécessitant une recherche par keyword
@@ -24,22 +25,15 @@ TICKER_KEYWORDS = {
 NEWS_CATEGORIES = ['general', 'forex', 'crypto', 'merger']
 
 
-def _get_model_name() -> str:
-    """Récupère le nom du modèle depuis config.json"""
+def _get_claude_model() -> str:
+    """Récupère le modèle Claude pour news depuis config.json"""
     try:
         with open('/app/config.json', 'r') as f:
-            return json.load(f).get('model', 'mistral-nemo')
+            config = json.load(f)
+            # Utiliser le modèle deep_analysis pour les news (qualité)
+            return config.get('claude_models', {}).get('deep_analysis', 'claude-sonnet-4-5-20250929')
     except:
-        return 'mistral-nemo'
-
-
-def _get_num_threads() -> int:
-    """Récupère le nombre de threads depuis config.json"""
-    try:
-        with open('/app/config.json', 'r') as f:
-            return json.load(f).get('num_threads', 12)
-    except:
-        return 12
+        return 'claude-sonnet-4-5-20250929'
 
 
 def _get_tickers() -> List[str]:
@@ -76,8 +70,8 @@ class NewsFetcher:
         self.client = None
         self.cache = NewsCache()
         
-        print(f"🔧 NewsFetcher init - API Key présente: {bool(FINNHUB_API_KEY)}")
-        print(f"🔧 OLLAMA_URL: {OLLAMA_URL}")
+        print(f"🔧 NewsFetcher init - Finnhub API Key: {bool(FINNHUB_API_KEY)}")
+        print(f"🔧 Claude API Key: {bool(ANTHROPIC_API_KEY)}")
         
         if FINNHUB_API_KEY:
             try:
@@ -333,67 +327,47 @@ ANALYSE:"""
     
     prompt = prompts.get(category, prompts['market'])
 
-    model = _get_model_name()
-    num_threads = _get_num_threads()
-    print(f"   🤖 Appel Ollama: {OLLAMA_URL} avec modèle {model} ({num_threads} threads)")
+    model = _get_claude_model()
+    print(f"   🤖 Appel Claude API avec modèle {model}")
     
-    # Add instruction to force clean output without thinking tags
-    clean_prompt = f"""{prompt}
-
-IMPORTANT: Réponds UNIQUEMENT avec l'analyse demandée. Ne mets PAS de balises <think> ou de raisonnement intermédiaire. Commence directement par l'analyse."""
+    # System prompt pour Claude
+    system_prompt = """Tu es un analyste financier senior avec 20 ans d'expérience.
+Tu analyses les actualités financières avec précision et profondeur.
+Réponds en français, de manière fluide et professionnelle.
+Ne mets PAS de balises de raisonnement, commence directement par l'analyse."""
     
     try:
-        # Use chat API for better standardization across models
-        # Large timeout (10 min) to handle slow models without retry overhead
-        response = requests.post(
-            f"{OLLAMA_URL}/api/chat",
-            json={
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": clean_prompt
-                    }
-                ],
-                "stream": False,
-                "options": {
-                    "temperature": 0.7,
-                    "num_predict": 500,
-                    "num_thread": num_threads
-                }
-            },
-            timeout=600
-        )
+        if not ANTHROPIC_API_KEY:
+            print(f"   ❌ ANTHROPIC_API_KEY manquante")
+            return {
+                'summary': "Clé API Claude manquante. Configurer ANTHROPIC_API_KEY dans .env",
+                'article_count': len(articles),
+                'error': 'missing_api_key'
+            }
+        
+        headers = {
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+        
+        data = {
+            "model": model,
+            "max_tokens": 1000,
+            "temperature": 0.7,
+            "system": system_prompt,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ]
+        }
+        
+        response = requests.post(ANTHROPIC_API_URL, headers=headers, json=data, timeout=60)
         
         print(f"   📡 Response status: {response.status_code}")
         
         if response.status_code == 200:
             result = response.json()
-            summary_text = ""
-            
-            # Extract content from various possible response formats
-            if 'message' in result and 'content' in result['message']:
-                # Chat API response format
-                summary_text = result['message']['content'].strip()
-            elif 'response' in result:
-                # Generate API response format
-                summary_text = result.get('response', '').strip()
-            elif 'thinking' in result:
-                # DeepSeek-R1 thinking field
-                summary_text = result.get('thinking', '').strip()
-                
-            # Clean up any thinking tags that might remain
-            if '<think>' in summary_text and '</think>' in summary_text:
-                parts = summary_text.split('</think>')
-                summary_text = parts[-1].strip() if len(parts) > 1 else summary_text.replace('<think>', '').replace('</think>', '').strip()
-            
-            # Remove standalone <think> or </think> tags
-            summary_text = summary_text.replace('<think>', '').replace('</think>', '').strip()
-            
-            # Debug if still empty
-            if len(summary_text) == 0:
-                print(f"   🔍 Full result keys: {result.keys()}")
-                print(f"   🔍 Result preview: {str(result)[:300]}")
+            summary_text = result["content"][0]["text"] if "content" in result else ""
             
             print(f"   ✅ Résumé reçu: {len(summary_text)} chars")
             return {
@@ -403,7 +377,8 @@ IMPORTANT: Réponds UNIQUEMENT avec l'analyse demandée. Ne mets PAS de balises 
                 'generated_at': datetime.now().isoformat()
             }
         else:
-            print(f"   ❌ Erreur Ollama: {response.text[:200]}")
+            error_msg = response.text[:200] if hasattr(response, 'text') else str(response)
+            print(f"   ❌ Erreur Claude API: {error_msg}")
     except Exception as e:
         print(f"   ❌ Exception génération résumé: {e}")
         import traceback

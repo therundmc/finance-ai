@@ -12,3 +12,6 @@ requests>=2.31.0
 # Data analysis
 pandas>=2.0.0
 numpy>=1.24.0
+
+# Nouvelles sources de données
+feedparser>=6.0.10  # Google News RSS

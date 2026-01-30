@@ -137,13 +137,13 @@ def is_market_day():
 
 
 def analyze_stock(ticker, model, advanced=False, num_threads=12):
-    """Analyse une action avec les données enrichies et génère des conseils"""
+    """Analyse une action avec approche HYBRIDE (Haiku → Sonnet)"""
     print(f"\n{'='*60}")
-    print(f"📊 Analyse ENHANCED de {ticker} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"📊 Analyse HYBRIDE de {ticker} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}\n")
 
     try:
-        # 1. Récupérer les données enrichies
+        # 1. Récupérer les données enrichies (MULTI-SOURCES)
         enhanced_data = fetch_enhanced_stock_data(ticker)
         if not enhanced_data:
             print(f"⚠️ Impossible de récupérer les données enrichies pour {ticker}")
@@ -151,25 +151,85 @@ def analyze_stock(ticker, model, advanced=False, num_threads=12):
 
         hist_1mo, analysis_data, actions = enhanced_data
 
-        # 2. Récupérer les données standard (CORRECTION: décompacter le tuple correctement)
+        # 2. Récupérer les données standard
         stock_data = fetch_stock_data(ticker)
         if not stock_data:
             print(f"⚠️ Impossible de récupérer les données pour {ticker}")
             return None
 
-        # CORRECTION: fetch_stock_data retourne (hist_5d, hist_1mo, hist_3mo, info)
         hist_5d, hist_1mo_standard, hist_3mo, info_standard = stock_data
 
-        # Extraction des composants du dictionnaire pour plus de clarté
+        # Extraction des composants
         info = analysis_data.get("info", {})
         news = analysis_data.get("news", [])
         calendar = analysis_data.get("calendar", None)
         recos = analysis_data.get("recommendations", None)
+        alpha_vantage = analysis_data.get("alpha_vantage", None)  # NOUVEAU
+        fred_macro = analysis_data.get("fred_macro", None)  # NOUVEAU
 
-        # 3. Calculer les indicateurs techniques (sur la base du mois d'historique)
+        # 3. Calculer variations pour screening
+        current_price = float(hist_1mo['Close'].iloc[-1]) if not hist_1mo.empty else 0
+        if len(hist_1mo) >= 2:
+            monthly_change = ((current_price - hist_1mo['Close'].iloc[0]) / hist_1mo['Close'].iloc[0] * 100)
+        else:
+            monthly_change = 0
+
+        # === PHASE 1: SCREENING HAIKU ===
+        from config import load_config
+        from ai_analysis import screen_with_haiku
+        
+        config = load_config()
+        use_screening = config.get('use_claude', True) and config.get('screening_threshold') is not None
+        
+        if use_screening:
+            screening_result = screen_with_haiku(ticker, analysis_data, current_price, monthly_change)
+            
+            # Si score < seuil, skip analyse approfondie
+            if not screening_result['should_analyze']:
+                print(f"⏭️  Score {screening_result['score']}/100 < seuil - Analyse approfondie skippée")
+                print(f"   Raison: {screening_result['reason']}")
+                
+                # Retourner analyse minimale pour DB
+                signal_info = {
+                    'signal': 'NEUTRE',
+                    'confidence': 'Faible',
+                    'summary': f"Screening: {screening_result['reason']}",
+                    'structured_data': None
+                }
+                
+                var_1d, var_1mo = calculate_variations(hist_5d, hist_1mo)
+                currency_info = get_ticker_currency(ticker)
+                
+                # Sauvegarder quand même en DB (avec flag screening)
+                if config.get('save_history', True):
+                    analysis_data_db = {
+                        'ticker': ticker,
+                        'timestamp': datetime.now(),
+                        'price': current_price,
+                        'change_1d': var_1d,
+                        'change_1mo': var_1mo,
+                        'model': f"haiku-screening-{screening_result['score']}",
+                        'analysis_time': screening_result['screening_time'],
+                        'signal': signal_info['signal'],
+                        'confidence': signal_info['confidence'],
+                        'summary': signal_info['summary'],
+                        'news_analyzed': len(news),
+                        'analysis': f"Screening Haiku: Score {screening_result['score']}/100\n{screening_result['reason']}",
+                        'raw_response': screening_result['reason'],
+                        'currency': currency_info['currency']
+                    }
+                    
+                    save_analysis(analysis_data_db)
+                
+                return None  # Skip deep analysis
+        
+        # === PHASE 2: ANALYSE APPROFONDIE SONNET ===
+        print(f"✅ Score screening suffisant - Analyse approfondie Sonnet")
+
+        # 4. Calculer les indicateurs techniques
         indicators = get_technical_indicators(hist_1mo)
 
-        # 4. Construire le prompt (on passe maintenant les données enrichies)
+        # 5. Construire le prompt (avec nouvelles sources)
         context = build_analysis_prompt(
             ticker=ticker,
             hist_1mo=hist_1mo,
@@ -178,20 +238,21 @@ def analyze_stock(ticker, model, advanced=False, num_threads=12):
             advanced=advanced,
             news=news,
             calendar=calendar,
-            recommendations=recos
+            recommendations=recos,
+            alpha_vantage=alpha_vantage,  # NOUVEAU
+            fred_macro=fred_macro  # NOUVEAU
         )
 
-        # 5. Générer l'analyse IA
+        # 6. Générer l'analyse IA (Sonnet)
         analysis_text, elapsed_time = generate_analysis(ticker, model, context, num_threads)
 
         if not analysis_text:
             return None
 
-        # 6. Extraire le signal et résumé (supporte JSON structuré ou regex fallback)
+        # 7. Extraire le signal et résumé
         signal_info = extract_signal_from_analysis(analysis_text)
         signal_info = validate_signal(signal_info)
         
-        # Si on a des données structurées, générer le texte d'analyse formaté
         structured_data = signal_info.get('structured_data')
         if structured_data:
             formatted_text = format_structured_analysis(structured_data)
@@ -200,22 +261,18 @@ def analyze_stock(ticker, model, advanced=False, num_threads=12):
             formatted_text = analysis_text
             print(f"\n⚠️ Fallback mode regex (format texte)")
 
-        # 7. Afficher les résultats
+        # 8. Afficher les résultats
         print(f"\n{formatted_text if formatted_text else analysis_text}")
         print(f"\n⏱️ Temps d'analyse: {elapsed_time:.1f}s")
         print(f"🎯 Signal: {signal_info['signal']} (Conviction: {signal_info['confidence']})")
         print(f"💡 Résumé: {signal_info['summary']}")
 
-        # 8. Calculer variations (CORRECTION: utiliser hist_5d correctement décompacté)
+        # 9. Calculer variations
         var_1d, var_1mo = calculate_variations(hist_5d, hist_1mo)
 
-        # Debug: afficher les variations calculées
         print(f"📈 Variation 1j: {var_1d:.2f}% | Variation 1m: {var_1mo:.2f}%")
 
-        # 9. Récupérer le prix actuel
-        current_price = float(hist_1mo['Close'].iloc[-1]) if not hist_1mo.empty else 0
-        
-        # 9b. Récupérer la devise
+        # 10. Récupérer devise
         currency_info = get_ticker_currency(ticker)
 
         # 10. Sauvegarder les résultats complets

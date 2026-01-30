@@ -22,6 +22,11 @@
   "use_claude": true,
   "screening_threshold": 60,
   "max_deep_analyses_per_day": 20,
+  "claude_models": {
+    "screening": "claude-haiku-4-5-20251001",
+    "deep_analysis": "claude-sonnet-4-5-20250929",
+    "portfolio": "claude-sonnet-4-5-20250929"
+  },
   "trading": {
     "buy_commission": 10.0,
     "sell_commission": 12.0,
