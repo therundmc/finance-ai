@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Finance AI Dashboard</title>
+    
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSS Variables -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/header.css') }}">
+    
+    <!-- Theme color for mobile browsers -->
+    <meta name="theme-color" content="#ff3366">
+    
+    <style>
+        /* Reset & Base */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        body.dark {
+            --bg-primary: #161311;
+            --bg-secondary: #1f1b18;
+            --bg-tertiary: #2a2520;
+            --bg-hover: #3a332c;
+            --text-primary: #f5f0eb;
+            --text-secondary: #a89f94;
+            --border-color: #3a332c;
+            --success-color: #22c55e;
+            --danger-color: #ef4444;
+            --accent-gradient: linear-gradient(135deg, #ff6b35, #ff3366);
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0;
+        }
+
+        /* Header - Collapsible */
+        header {
+            background: var(--bg-secondary);
+            border-bottom: 2px solid var(--border-color);
+            padding: 10px 16px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            transition: all 0.3s ease;
+            margin-bottom: 12px;
+        }
+
+        header.collapsed {
+            padding: 6px 16px;
+        }
+
+        header.collapsed .header-title h1 {
+            font-size: 1rem;
+        }
+
+        header.collapsed .subtitle {
+            display: none;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .header-title h1 {
+            font-size: 1.2rem;
+            font-weight: 900;
+            background: linear-gradient(90deg, var(--accent, #ff3366), var(--brand-secondary, #7c3aed), var(--brand-accent, #06d6a0), var(--accent, #ff3366));
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradient-shift 3s ease infinite;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: font-size 0.3s ease;
+        }
+
+        @keyframes gradient-shift {
+            0%, 100% { background-position: 0% center; }
+            50% { background-position: 100% center; }
+        }
+
+        .header-title .emoji {
+            font-size: 1em;
+            -webkit-text-fill-color: initial;
+            animation: rocket 2.5s ease-in-out infinite;
+        }
+
+        @keyframes rocket {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        .header-title .subtitle {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            margin-top: 2px;
+            transition: opacity 0.3s ease;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        /* Theme Toggle Button - using app-button style */
+        .theme-toggle-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 10px;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 600;
+        }
+
+        .theme-toggle-btn:hover {
+            border-color: var(--accent, #ff3366);
+            background: rgba(255, 51, 102, 0.1);
+            transform: scale(1.02);
+        }
+
+        .theme-toggle-btn:active {
+            transform: scale(0.95);
+        }
+
+        .theme-toggle-btn .theme-icon {
+            font-size: 0.9rem;
+        }
+
+        .theme-toggle-btn .theme-label {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 480px) {
+            .theme-toggle-btn .theme-label {
+                display: none;
+            }
+        }
+
+        /* Main Section Toggle */
+        .main-section-toggle {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background: var(--bg-secondary);
+            border-radius: 999px;
+            margin: 16px auto;
+            max-width: 300px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Floating bottom only on mobile */
+        @media (max-width: 768px) {
+            .main-section-toggle {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                z-index: 1000;
+                margin: 0;
+                padding: 6px 10px 10px 10px;
+                background: var(--bg-secondary);
+                border: none;
+                border-top: 2px solid var(--border-color);
+                border-radius: 0;
+                transition: all 0.3s ease;
+                width: 100%;
+                max-width: 100%;
+                justify-content: center;
+            }
+
+            .main-section-toggle.minimized {
+                padding: 4px 12px 6px 12px;
+            }
+
+            /* Make buttons smaller */
+            .main-section-toggle section-toggle-btn {
+                --button-font-size: 0.75rem;
+                --button-icon-size: 1rem;
+                flex: 0 1 auto;
+                transition: all 0.3s ease;
+            }
+
+            .main-section-toggle.minimized section-toggle-btn {
+                --button-font-size: 0.6rem;
+                --button-icon-size: 0.75rem;
+            }
+        }
+
+        /* Main Content */
+        main {
+            padding: 8px 10px 40px 10px;
+        }
+
+        @media (max-width: 768px) {
+            main {
+                padding: 8px 10px 80px 10px;
+            }
+        }
+
+        .main-section {
+            display: none;
+        }
+
+        .main-section.active {
+            display: block;
+        }
+
+        /* Analysis Section Placeholder */
+        .analysis-placeholder {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .analysis-placeholder-icon {
+            font-size: 4rem;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .analysis-placeholder-text {
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+
+        .analysis-placeholder-subtext {
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body class="dark">
+    <div class="container">
+        <header id="main-header">
+            <div class="header-content">
+                <div class="header-title">
+                    <h1><span class="emoji">🚀</span> Finance AI</h1>
+                    <p class="subtitle">Made with ❤️ by Anca & Claude</p>
+                </div>
+                <div class="header-actions">
+                    <button id="hide-values-toggle" class="theme-toggle-btn" title="Masquer/Afficher les valeurs">
+                        <span class="hide-icon">👁️</span>
+                    </button>
+                    <form-dropdown 
+                        id="currency-selector" 
+                        value="USD"
+                        size="small"
+                    ></form-dropdown>
+                    <button id="theme-toggle" class="theme-toggle-btn">
+                        <span class="theme-icon">☀️</span>
+                        <span class="theme-label">Clair</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Section Toggle -->
+        <div class="main-section-toggle" id="section-toggle">
+            <section-toggle-btn icon="💼" label="Portefeuille" active id="toggle-portfolio"></section-toggle-btn>
+            <section-toggle-btn icon="🤖" label="AI Analysis" id="toggle-analysis"></section-toggle-btn>
+        </div>
+
+        <main>
+            <!-- Portfolio Section -->
+            <div class="main-section active" id="section-portfolio">
+                <portfolio-page 
+                    id="portfolio-page"
+                    theme="dark"
+                    currency="USD"
+                ></portfolio-page>
+            </div>
+
+            <!-- Analysis Section -->
+            <div class="main-section" id="section-analysis">
+                <analysis-page
+                    id="analysis-page"
+                    theme="dark"
+                ></analysis-page>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification Component -->
+    <toast-notification></toast-notification>
+
+    <!-- Modals -->
+    <app-modal
+        id="new-position-modal"
+        title="📈 Nouvelle position"
+        type="form"
+        submit-text="Ouvrir"
+        size="md"
+    >
+        <div slot="body">
+            <form id="new-position-form" style="display: flex; flex-direction: column; gap: 12px;">
+                <input type="hidden" id="pos-analysis-id" value="">
+                
+                <form-dropdown
+                    label="Ticker (AI Analyses)"
+                    name="ticker"
+                    id="pos-ticker"
+                    required
+                ></form-dropdown>
+                
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <form-input 
+                        label="Prix d'entrée" 
+                        name="entry-price" 
+                        type="number" 
+                        step="0.01" 
+                        id="pos-entry-price" 
+                        required
+                    ></form-input>
+                    <form-input 
+                        label="Quantité" 
+                        name="quantity" 
+                        type="number" 
+                        step="0.01" 
+                        value="1" 
+                        id="pos-quantity" 
+                        required
+                    ></form-input>
+                </div>
+                
+                <form-input 
+                    label="Date d'entrée" 
+                    name="entry-date" 
+                    type="date" 
+                    id="pos-entry-date" 
+                    required
+                ></form-input>
+                
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <form-input 
+                        label="Stop Loss" 
+                        name="stop-loss" 
+                        type="number" 
+                        step="0.01" 
+                        id="pos-stop-loss"
+                    ></form-input>
+                    <form-input 
+                        label="Take Profit 1" 
+                        name="tp1" 
+                        type="number" 
+                        step="0.01" 
+                        id="pos-tp1"
+                    ></form-input>
+                </div>
+                
+                <form-input 
+                    label="Take Profit 2 (optionnel)" 
+                    name="tp2" 
+                    type="number" 
+                    step="0.01" 
+                    id="pos-tp2"
+                ></form-input>
+                
+                <form-input 
+                    label="Notes" 
+                    name="notes" 
+                    type="textarea" 
+                    id="pos-notes" 
+                    placeholder="Notes personnelles..."
+                ></form-input>
+            </form>
+        </div>
+    </app-modal>
+
+    <app-modal
+        id="close-position-modal"
+        title="🔒 Clôturer la position"
+        type="form"
+        submit-text="Clôturer"
+        size="md"
+    >
+        <div slot="body">
+            <form id="close-position-form" style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Position info -->
+                <div id="close-position-info" style="display: flex; justify-content: space-between; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; font-size: 0.8rem;">
+                    <span id="close-ticker" style="font-weight: 700;"></span>
+                    <span id="close-qty-info"></span>
+                </div>
+                
+                <!-- Quantity selector -->
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">Quantité à vendre</label>
+                    <div id="qty-buttons" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="qty-btn" data-percent="25" style="flex: 1; min-width: 50px; padding: 8px; background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 8px; color: var(--text-primary); cursor: pointer; font-weight: 600;">25%</button>
+                        <button type="button" class="qty-btn" data-percent="50" style="flex: 1; min-width: 50px; padding: 8px; background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 8px; color: var(--text-primary); cursor: pointer; font-weight: 600;">50%</button>
+                        <button type="button" class="qty-btn" data-percent="75" style="flex: 1; min-width: 50px; padding: 8px; background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 8px; color: var(--text-primary); cursor: pointer; font-weight: 600;">75%</button>
+                        <button type="button" class="qty-btn active" data-percent="100" style="flex: 1; min-width: 50px; padding: 8px; background: var(--brand-primary); border: 2px solid var(--brand-primary); border-radius: 8px; color: white; cursor: pointer; font-weight: 600;">100%</button>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">Vente:</span>
+                        <span id="sell-qty-display" style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">0</span>
+                        <span id="sell-type" style="font-size: 0.7rem; color: var(--text-muted);">(vente totale)</span>
+                    </div>
+                    <input type="hidden" id="close-sell-percent" value="100">
+                </div>
+                
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <form-input 
+                        label="Prix de sortie" 
+                        name="exit-price" 
+                        type="number" 
+                        step="0.01" 
+                        id="close-price" 
+                        required
+                    ></form-input>
+                    
+                    <form-input 
+                        label="Date de sortie" 
+                        name="exit-date" 
+                        type="date" 
+                        id="close-date" 
+                        required
+                    ></form-input>
+                </div>
+                
+                <form-dropdown
+                    label="Raison de clôture"
+                    name="close-reason"
+                    id="close-reason"
+                ></form-dropdown>
+                
+                <form-input 
+                    label="Notes" 
+                    name="close-notes" 
+                    type="textarea" 
+                    id="close-notes" 
+                    placeholder="Notes de clôture..."
+                ></form-input>
+            </form>
+        </div>
+    </app-modal>
+
+    <app-modal
+        id="delete-position-modal"
+        title="Supprimer la position"
+        type="confirmation"
+        confirm-text="Supprimer"
+        cancel-text="Annuler"
+        confirm-variant="danger"
+        size="sm"
+    >
+        <div slot="message">
+            <div class="confirmation-text">Voulez-vous vraiment supprimer cette position ?</div>
+            <div class="confirmation-subtext" id="delete-position-ticker"></div>
+        </div>
+    </app-modal>
+
+    <app-modal
+        id="edit-targets-modal"
+        title="✏️ Éditer les objectifs"
+        type="form"
+        submit-text="Enregistrer"
+        size="sm"
+    >
+        <div slot="body">
+            <form id="edit-targets-form" style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="text-align: center; padding: 8px; background: var(--bg-tertiary); border-radius: 8px; font-size: 0.85rem; font-weight: 700;">
+                    <span id="edit-targets-ticker"></span>
+                </div>
+                
+                <form-input 
+                    label="Stop Loss" 
+                    name="stop-loss" 
+                    type="number" 
+                    step="0.01" 
+                    id="edit-stop-loss"
+                    placeholder="Prix SL (optionnel)"
+                ></form-input>
+                
+                <form-input 
+                    label="Take Profit 1" 
+                    name="tp1" 
+                    type="number" 
+                    step="0.01" 
+                    id="edit-tp1"
+                    placeholder="Prix TP1 (optionnel)"
+                ></form-input>
+                
+                <form-input 
+                    label="Take Profit 2" 
+                    name="tp2" 
+                    type="number" 
+                    step="0.01" 
+                    id="edit-tp2"
+                    placeholder="Prix TP2 (optionnel)"
+                ></form-input>
+            </form>
+        </div>
+    </app-modal>
+
+    <!-- Load Lit Components -->
+    <script type="module">
+        // Import all components
+        import './static/js/components/base-component.js';
+        import './static/js/components/badge.js';
+        import './static/js/components/stat-card.js';
+        import './static/js/components/position-card.js';
+        import './static/js/components/portfolio-chart.js';
+        import './static/js/components/button.js';
+        import './static/js/components/section-toggle-btn.js';
+        import './static/js/components/form-input.js';
+        import './static/js/components/form-dropdown.js';
+        import './static/js/components/modal.js';
+        import './static/js/components/toast-notification.js';
+        import './static/js/components/analysis-history-card.js';
+        import './static/js/components/news-panel.js';
+        import './static/js/components/indicator-trend-chart.js';
+        import './static/js/components/pages/portfolio-page.js';
+        import './static/js/components/pages/analysis-page.js';
+        
+        // Import main app module (handles all logic)
+        import './static/js/app.js';
+    </script>
+</body>
+</html>

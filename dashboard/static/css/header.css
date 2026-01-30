@@ -1,0 +1,114 @@
+/* ============================================
+   HEADER & NAVIGATION
+   ============================================ */
+
+header {
+    padding: var(--spacing-xs) 0;
+    border-bottom: var(--border-width-md) solid var(--border-color);
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+header h1 {
+    font-size: clamp(1.3rem, 4vw, 1.7rem);
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.5px;
+    background: linear-gradient(90deg, var(--accent), var(--brand-secondary), var(--brand-accent), var(--accent));
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradient-shift 3s ease infinite;
+}
+
+header h1 .emoji {
+    font-size: 1em;
+    animation: rocket 2.5s ease-in-out infinite;
+    display: inline-block;
+    -webkit-text-fill-color: initial;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    margin-top: 2px;
+    font-weight: 500;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* Currency Selector */
+.currency-selector {
+    padding: var(--spacing-xs) 12px;
+    background: var(--bg-tertiary);
+    border: var(--border-width-md) solid var(--border-color);
+    border-radius: var(--radius-full);
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-spring);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+}
+
+.currency-selector:hover { border-color: var(--accent); background-color: var(--accent-light); }
+.currency-selector:focus { outline: none; border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.2); }
+
+[data-theme="dark"] .currency-selector {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23aaa' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+
+[data-theme="dark"] .currency-selector option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* Theme Toggle */
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: var(--spacing-xs) 12px;
+    background: var(--bg-tertiary);
+    border: var(--border-width-md) solid var(--border-color);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: var(--transition-spring);
+    font-weight: 600;
+}
+
+.theme-toggle:hover { border-color: var(--accent); background: var(--accent-light); transform: scale(1.02); }
+.theme-toggle:active { transform: scale(0.95); }
+.theme-toggle-icon { font-size: 1rem; transition: var(--transition-bounce); }
+.theme-toggle:hover .theme-toggle-icon { transform: rotate(20deg) scale(1.1); }
+.theme-toggle-label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+
+@keyframes gradient-shift {
+    0%, 100% { background-position: 0% center; }
+    50% { background-position: 100% center; }
+}
+
+@keyframes rocket {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+@media (min-width: 480px) { .subtitle { font-size: 0.75rem; } }
+@media (max-width: 480px) { .theme-toggle-label { display: none; } }

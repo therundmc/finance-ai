@@ -1,0 +1,7 @@
+ollama
+yfinance
+schedule
+pytz
+sqlalchemy>=2.0.0
+finnhub-python
+python-dotenv

@@ -1,0 +1,28 @@
+{
+  "tickers": [
+    "AAPL",
+    "AMD",
+    "ASML",
+    "ENOV",
+    "GCTS",
+    "GOOG",
+    "INTC",
+    "LMT",
+    "LOGI",
+    "MU",
+    "NVDA",
+    "SNDK",
+    "STX",
+    "TTWO"
+  ],
+  "model": "magistral",
+  "save_history": true,
+  "advanced_analysis": true,
+  "parallel_analysis": true,
+  "num_threads": 14,
+  "trading": {
+    "buy_commission": 10.0,
+    "sell_commission": 12.0,
+    "commission_currency": "CHF"
+  }
+}

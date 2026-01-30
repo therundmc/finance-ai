@@ -1,0 +1,93 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: finance-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./models:/root/.ollama
+    environment:
+      - OLLAMA_NUM_PARALLEL=3
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_THREAD=14
+      - TZ=Europe/Zurich
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '14'
+          memory: 24G
+
+  analyzer:
+    build: .
+    container_name: finance-analyzer
+    depends_on:
+      - ollama
+    volumes:
+      - ./data:/app/data
+      - ./app:/app
+      - ./app/config.json:/app/config.json
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=ollama:11434
+      - OLLAMA_NUM_THREAD=14
+      - TZ=Europe/Zurich
+      - PYTHONUNBUFFERED=1
+      - DATABASE_PATH=/app/data/finance.db
+    restart: unless-stopped
+    network_mode: "service:ollama"
+
+  dashboard:
+    build: ./dashboard
+    container_name: finance-dashboard
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./data:/app/data
+      - ./app/database.py:/app/database.py:ro
+      - ./app/news_fetcher.py:/app/news_fetcher.py:ro
+      - ./app/config.json:/app/config.json
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Zurich
+      - DATABASE_PATH=/app/data/finance.db
+      - SSE_PRICE_INTERVAL=5
+      - SSE_NEWS_INTERVAL=120
+      - SSE_ANALYSES_INTERVAL=60
+      - PORTFOLIO_SERVICE_URL=http://portfolio:5555
+    restart: unless-stopped
+    depends_on:
+      - analyzer
+
+  portfolio:
+    build: ./portfolio
+    container_name: finance-portfolio
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./data:/app/data
+      - ./app/database.py:/app/database.py:ro
+    environment:
+      - TZ=Europe/Zurich
+      - DATABASE_PATH=/app/data/finance.db
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    depends_on:
+      - analyzer
+
+  mail:
+    build: ./mail
+    container_name: finance-mail
+    volumes:
+      - ./data:/app/data
+      - ./app/database.py:/app/database.py:ro
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Zurich
+      - DATABASE_PATH=/app/data/finance.db
+    restart: unless-stopped
+    depends_on:
+      - analyzer
