@@ -15,11 +15,13 @@
     "STX",
     "TTWO"
   ],
-  "model": "magistral",
   "save_history": true,
   "advanced_analysis": true,
   "parallel_analysis": true,
   "num_threads": 14,
+  "use_claude": true,
+  "screening_threshold": 60,
+  "max_deep_analyses_per_day": 20,
   "trading": {
     "buy_commission": 10.0,
     "sell_commission": 12.0,
