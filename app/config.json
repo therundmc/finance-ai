@@ -50,9 +50,13 @@
   "claude_tokens": {
     "screening": 256,
     "deep_analysis": 2800,
-    "portfolio": 3500,
+    "portfolio": 5000,
     "news": 700
   },
+  "budget": 7000.0,
+  "budget_currency": "CHF",
+  "risk_level": "agressif",
+  "investment_objective": "croissance long terme tech/defense",
   "model": "mistral-nemo",
   "trading": {
     "buy_commission": 10.0,

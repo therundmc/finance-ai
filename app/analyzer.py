@@ -729,8 +729,8 @@ def nightly_job():
 def run_portfolio_analysis(force: bool = False):
     """
     Analyse le portefeuille avec l'IA et génère des conseils du jour.
-    Exécuté après les analyses de stocks.
-    
+    Inclut toutes les actions surveillées, les news et le profil investisseur.
+
     Args:
         force: Si True, force la régénération même si récent
     """
@@ -740,82 +740,116 @@ def run_portfolio_analysis(force: bool = False):
         recent = get_latest_portfolio_analysis()
         if recent:
             analysis_date = datetime.fromisoformat(recent['date']) if isinstance(recent['date'], str) else recent['date']
-            # Comparer la date (pas l'heure)
             if analysis_date.date() == datetime.now().date():
                 print(f"💼 Analyse portfolio déjà générée aujourd'hui ({recent['date']}) - skip")
                 return None
-    
+
     print(f"\n{'='*60}")
-    print(f"💼 ANALYSE AI DU PORTEFEUILLE")
+    print(f"💼 ANALYSE AI DU PORTEFEUILLE - CONSEILLER FINANCIER")
     print(f"🕐 Début: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}\n")
-    
+
     start_time = time.time()
-    
+
     try:
-        # 1. Récupérer les positions ouvertes
-        positions = get_positions(status='open')
-        
-        if not positions:
-            print("⚠️ Aucune position ouverte - pas d'analyse portefeuille")
-            return None
-        
-        print(f"📊 {len(positions)} positions ouvertes à analyser")
-        
-        # 2. Récupérer les dernières analyses pour chaque ticker
-        tickers = list(set(p['ticker'] for p in positions))
-        latest_analyses = get_latest_analyses(tickers)
-        
-        print(f"📈 Analyses récentes disponibles pour {len(latest_analyses)} tickers")
-        
-        # 3. Configuration
+        # 1. Configuration
         config = load_config()
         model = config.get('model', 'mistral-nemo')
         num_threads = config.get('num_threads', 12)
-        
-        # 4. Générer l'analyse IA du portefeuille
+
+        # 2. Récupérer les positions ouvertes
+        positions = get_positions(status='open')
+        n_positions = len(positions) if positions else 0
+        print(f"📊 {n_positions} positions ouvertes")
+
+        # 3. Récupérer les analyses de TOUS les tickers surveillés
+        all_tickers = config.get('tickers', [])
+        all_analyses = get_latest_analyses(all_tickers)
+        print(f"📈 Analyses disponibles pour {len(all_analyses)}/{len(all_tickers)} tickers")
+
+        # 4. Récupérer les news
+        from database import get_latest_news_summaries
+        news_data = get_latest_news_summaries(max_age_minutes=1440)
+        news_summaries = news_data.get('summaries', {}) if news_data.get('success') else {}
+        print(f"📰 {len(news_summaries)} catégories de news disponibles")
+
+        # 5. Générer l'analyse IA du portefeuille
         analysis_result, elapsed_time = generate_portfolio_analysis(
-            positions=positions,
-            latest_analyses=latest_analyses,
+            positions=positions or [],
+            all_analyses=all_analyses,
+            news_summaries=news_summaries,
+            config=config,
             model=model,
             num_threads=num_threads
         )
-        
+
         if not analysis_result:
             print("❌ Échec de l'analyse portefeuille")
             return None
-        
-        # 5. Sauvegarder en DB
+
+        # 6. Calculate baseline for projection tracking
+        from database import get_positions_summary, get_portfolio_performance
+        summary = get_positions_summary()
+        perf = get_portfolio_performance()
+
+        baseline_value = summary.get('current_value', 0) if summary else 0
+        baseline_pnl_pct = perf.get('total_pnl_pct', 0) if perf else 0
+
+        # 7. Sauvegarder en DB
         saved = save_portfolio_analysis(
             analysis_data=analysis_result,
             model=model,
             elapsed_time=elapsed_time,
-            positions_count=len(positions)
+            positions_count=n_positions,
+            baseline_portfolio_value=baseline_value,
+            baseline_pnl_pct=baseline_pnl_pct
         )
-        
-        # 6. Afficher le résumé
+
+        # 7. Afficher le résumé
         total_time = time.time() - start_time
-        
+
         print(f"\n{'='*60}")
         print(f"💼 RÉCAP ANALYSE PORTEFEUILLE")
         print(f"{'='*60}")
         print(f"⏱️  Durée:      {total_time:.1f}s")
-        print(f"📊 Positions:  {len(positions)}")
-        
+        print(f"📊 Positions:  {n_positions}")
+        print(f"📈 Tickers:    {len(all_analyses)} analysés")
+
         if analysis_result and 'resume_global' in analysis_result:
             resume = analysis_result['resume_global']
             print(f"🏥 État:       {resume.get('etat_portfolio', 'N/A')}")
             print(f"📈 Tendance:   {resume.get('tendance', 'N/A')}")
             print(f"💯 Score:      {resume.get('score_sante', 'N/A')}/100")
-            
-            # Actions prioritaires
-            actions = analysis_result.get('actions_du_jour', {})
-            high_priority = actions.get('priorite_haute', [])
-            if high_priority:
-                print(f"\n🚨 ACTIONS PRIORITAIRES:")
-                for action in high_priority[:3]:
-                    print(f"   → {action}")
-            
+
+            # Plan d'action
+            plan = analysis_result.get('plan_action', [])
+            if plan:
+                print(f"\n📋 PLAN D'ACTION:")
+                for i, step in enumerate(plan, 1):
+                    print(f"   {i}. {step}")
+
+            # Achats recommandés
+            achats = analysis_result.get('achats_recommandes', [])
+            if achats:
+                print(f"\n🛒 ACHATS RECOMMANDÉS:")
+                for a in achats:
+                    print(f"   → {a.get('ticker')}: {a.get('conviction', '')} | Entrée: {a.get('prix_entree', '?')}$ | SL: {a.get('stop_loss', '?')}$ | Obj: {a.get('objectif', '?')}$")
+
+            # Ventes recommandées
+            ventes = analysis_result.get('ventes_recommandees', [])
+            if ventes:
+                print(f"\n🔴 VENTES RECOMMANDÉES:")
+                for v in ventes:
+                    print(f"   → {v.get('ticker')}: {v.get('urgence', '')} | {v.get('raison', '')}")
+
+            # Projections
+            proj = analysis_result.get('projections', {})
+            if proj:
+                print(f"\n📊 PROJECTIONS:")
+                print(f"   1 semaine: {proj.get('expected_pnl_1w', '?')}%")
+                print(f"   1 mois:    {proj.get('expected_pnl_1m', '?')}%")
+                print(f"   1 an:      {proj.get('expected_pnl_1y', '?')}%")
+
             # Conseils par position
             conseils = analysis_result.get('conseils_positions', [])
             if conseils:
@@ -826,11 +860,11 @@ def run_portfolio_analysis(force: bool = False):
                     urgence = conseil.get('urgence', '')
                     urgence_icon = '🔴' if urgence == 'Haute' else '🟡' if urgence == 'Moyenne' else '🟢'
                     print(f"   {urgence_icon} {ticker}: {action}")
-        
+
         print(f"{'='*60}\n")
-        
+
         return analysis_result
-        
+
     except Exception as e:
         print(f"❌ Erreur analyse portefeuille: {e}")
         import traceback

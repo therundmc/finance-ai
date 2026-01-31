@@ -347,6 +347,219 @@ export class PortfolioAnalysisCard extends BaseComponent {
         to { transform: rotate(360deg); }
       }
 
+      /* Resume section */
+      .resume-section {
+        border-radius: var(--radius-sm);
+        margin-bottom: 14px;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: var(--text-secondary);
+      }
+
+      /* Plan d'action - clean structured list */
+      .plan-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .plan-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+      }
+
+      .plan-num {
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-size: 0.7rem;
+        font-weight: 800;
+        background: var(--brand-secondary);
+        color: white;
+      }
+
+      .plan-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .plan-main {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .plan-action-type {
+        font-weight: 800;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--text-primary);
+      }
+
+      .plan-ticker {
+        font-weight: 800;
+        font-size: 0.85rem;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-primary);
+      }
+
+      .plan-details {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 0.7rem;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-muted);
+      }
+
+      .plan-detail-item {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+
+      .plan-detail-label {
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+
+      .plan-reason {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        line-height: 1.4;
+        margin-top: 2px;
+      }
+
+      /* Sell Recommendations */
+      .sell-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .sell-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: rgba(255, 51, 102, 0.06);
+        border-left: 3px solid var(--danger);
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      }
+
+      .sell-ticker {
+        font-weight: 800;
+        font-size: 0.9rem;
+        color: var(--text-primary);
+        min-width: 50px;
+      }
+
+      .sell-urgence {
+        font-size: 0.6rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 10px;
+        text-transform: uppercase;
+        flex-shrink: 0;
+        background: rgba(255, 51, 102, 0.15);
+        color: var(--danger);
+      }
+
+      .sell-urgence.surveiller {
+        background: rgba(255, 179, 71, 0.15);
+        color: var(--warning, #f59e0b);
+      }
+
+      .sell-reason {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sell-price {
+        font-size: 0.7rem;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-muted);
+        margin-left: auto;
+      }
+
+      /* Buy Recommendations */
+      .buy-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .buy-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: rgba(6, 214, 160, 0.06);
+        border-left: 3px solid var(--success);
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      }
+
+      .buy-ticker {
+        font-weight: 800;
+        font-size: 0.9rem;
+        color: var(--text-primary);
+        min-width: 50px;
+      }
+
+      .buy-conviction {
+        font-size: 0.6rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 10px;
+        text-transform: uppercase;
+        flex-shrink: 0;
+      }
+
+      .buy-conviction.forte {
+        background: rgba(6, 214, 160, 0.15);
+        color: var(--success);
+      }
+
+      .buy-conviction.moyenne {
+        background: rgba(255, 179, 71, 0.15);
+        color: var(--warning, #f59e0b);
+      }
+
+      .buy-levels {
+        font-size: 0.7rem;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-muted);
+        margin-left: auto;
+      }
+
+      .buy-reason {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       /* Empty State */
       .empty-state {
         text-align: center;
@@ -383,6 +596,65 @@ export class PortfolioAnalysisCard extends BaseComponent {
     if (n >= 70) return 'good';
     if (n >= 40) return 'warning';
     return 'danger';
+  }
+
+  _parsePlanStep(step) {
+    // Parse a plan step like "Vendre GCTS immediatement a 1.16$ - cassure technique, SL 0.95$, liberer 568$"
+    // or "Acheter NOC a 692$ avec SL 645$ objectif 780$ - defense premium, resultats Q4"
+
+    const parsed = {
+      action: '',
+      ticker: '',
+      price: '',
+      stopLoss: '',
+      target: '',
+      budget: '',
+      reason: ''
+    };
+
+    // Extract action verb
+    const actionMatch = step.match(/^(Vendre|Acheter|Alleger|Surveiller|Conserver|Renforcer)/i);
+    if (actionMatch) {
+      parsed.action = actionMatch[1];
+    }
+
+    // Extract ticker (usually follows action, uppercase letters 2-5 chars)
+    const tickerMatch = step.match(/(?:Vendre|Acheter|Alleger|Surveiller|Conserver|Renforcer)\s+([A-Z]{1,5})\b/i);
+    if (tickerMatch) {
+      parsed.ticker = tickerMatch[1];
+    }
+
+    // Extract price "a XXX$" or "à XXX$"
+    const priceMatch = step.match(/\b(?:a|à)\s+([\d.]+)\$/i);
+    if (priceMatch) {
+      parsed.price = priceMatch[1];
+    }
+
+    // Extract stop-loss "SL XXX$" or "stop-loss XXX$"
+    const slMatch = step.match(/(?:SL|stop-loss)\s+([\d.]+)\$/i);
+    if (slMatch) {
+      parsed.stopLoss = slMatch[1];
+    }
+
+    // Extract target/objectif "objectif XXX$" or "Obj XXX$"
+    const targetMatch = step.match(/(?:objectif|obj)\s+([\d.]+)\$/i);
+    if (targetMatch) {
+      parsed.target = targetMatch[1];
+    }
+
+    // Extract budget "budget XXX CHF"
+    const budgetMatch = step.match(/budget\s+([\d.]+)\s*CHF/i);
+    if (budgetMatch) {
+      parsed.budget = budgetMatch[1];
+    }
+
+    // Extract reason (everything after first " - ")
+    const reasonMatch = step.match(/\s-\s(.+)$/);
+    if (reasonMatch) {
+      parsed.reason = reasonMatch[1];
+    }
+
+    return parsed;
   }
 
   _formatText(text) {
@@ -477,19 +749,18 @@ export class PortfolioAnalysisCard extends BaseComponent {
       `;
     }
 
-    const { 
-      portfolio_state, 
-      portfolio_trend, 
-      health_score, 
-      summary,
-      actions_high_priority = [],
-      actions_watch = [],
-      actions_opportunities = [],
-      conclusion,
-      allocation_comment,
-      main_risk,
-      created_at 
+    const {
+      portfolio_state,
+      portfolio_trend,
+      health_score,
+      resume_global = {},
+      plan_action = [],
+      achats_recommandes = [],
+      ventes_recommandees = [],
+      created_at
     } = this.analysis;
+
+    const resume = resume_global.resume || '';
 
     const healthClass = this._getHealthClass(health_score);
     const healthPercent = health_score ? Math.min(100, Math.max(0, health_score)) : 50;
@@ -499,7 +770,7 @@ export class PortfolioAnalysisCard extends BaseComponent {
         <div class="card-header" @click=${this._toggle}>
           <div class="header-icon">🤖</div>
           <div class="header-main">
-            <h3 class="header-title">Analyse du Portefeuille</h3>
+            <h3 class="header-title">Conseiller Financier</h3>
           </div>
           <div class="header-right">
             ${health_score != null ? html`
@@ -531,53 +802,77 @@ export class PortfolioAnalysisCard extends BaseComponent {
               </div>
             ` : ''}
 
-            <!-- Summary -->
-            ${summary ? html`
-              <div class="section">
-                <div class="section-title">Résumé</div>
-                <div class="text-section">${summary}</div>
+            <!-- Résumé -->
+            ${resume ? html`
+              <div class="resume-section">
+                ${resume}
               </div>
             ` : ''}
 
-            <!-- Actions -->
-            ${(actions_high_priority.length || actions_watch.length || actions_opportunities.length) ? html`
+            <!-- Plan d'action - structured steps -->
+            ${plan_action.length ? html`
               <div class="section">
-                <div class="section-title">Actions recommandées</div>
-                <div class="actions-list">
-                  ${actions_high_priority.map(action => html`
-                    <div class="action-item high">🚨 ${action}</div>
-                  `)}
-                  ${actions_watch.map(action => html`
-                    <div class="action-item watch">👁️ ${action}</div>
-                  `)}
-                  ${actions_opportunities.map(action => html`
-                    <div class="action-item opportunity">💡 ${action}</div>
+                <div class="section-title">Plan d'action</div>
+                <div class="plan-list">
+                  ${plan_action.map((step, i) => {
+                    const parsed = this._parsePlanStep(step);
+                    return html`
+                      <div class="plan-step">
+                        <span class="plan-num">${i + 1}</span>
+                        <div class="plan-content">
+                          <div class="plan-main">
+                            <span class="plan-action-type">${parsed.action}</span>
+                            ${parsed.ticker ? html`<span class="plan-ticker">${parsed.ticker}</span>` : ''}
+                          </div>
+                          ${(parsed.price || parsed.stopLoss || parsed.target || parsed.budget) ? html`
+                            <div class="plan-details">
+                              ${parsed.price ? html`<span class="plan-detail-item"><span class="plan-detail-label">Prix:</span> ${parsed.price}$</span>` : ''}
+                              ${parsed.stopLoss ? html`<span class="plan-detail-item"><span class="plan-detail-label">SL:</span> ${parsed.stopLoss}$</span>` : ''}
+                              ${parsed.target ? html`<span class="plan-detail-item"><span class="plan-detail-label">TP:</span> ${parsed.target}$</span>` : ''}
+                              ${parsed.budget ? html`<span class="plan-detail-item"><span class="plan-detail-label">Budget:</span> ${parsed.budget} CHF</span>` : ''}
+                            </div>
+                          ` : ''}
+                          ${parsed.reason ? html`<div class="plan-reason">${parsed.reason}</div>` : ''}
+                        </div>
+                      </div>
+                    `;
+                  })}
+                </div>
+              </div>
+            ` : ''}
+
+            <!-- Achats recommandés -->
+            ${achats_recommandes.length ? html`
+              <div class="section">
+                <div class="section-title">Achats recommandés</div>
+                <div class="buy-list">
+                  ${achats_recommandes.map(a => html`
+                    <div class="buy-item">
+                      <span class="buy-ticker">${a.ticker}</span>
+                      <span class="buy-conviction ${(a.conviction || '').toLowerCase()}">${a.conviction || ''}</span>
+                      ${a.nombre_actions ? html`<span class="buy-conviction moyenne" style="background: var(--bg-tertiary); color: var(--text-primary);">${a.nombre_actions}x</span>` : ''}
+                      <span class="buy-reason" title="${a.raison || ''}">${a.raison || ''}</span>
+                      <span class="buy-levels">${a.prix_entree ? `${a.prix_entree}$` : ''} ${a.stop_loss ? `SL:${a.stop_loss}$` : ''}</span>
+                    </div>
                   `)}
                 </div>
               </div>
             ` : ''}
 
-            <!-- Risk -->
-            ${main_risk ? html`
+            <!-- Ventes recommandées -->
+            ${ventes_recommandees.length ? html`
               <div class="section">
-                <div class="section-title">Risque principal</div>
-                <div class="text-section">${this._formatText(main_risk)}</div>
-              </div>
-            ` : ''}
-
-            <!-- Allocation -->
-            ${allocation_comment ? html`
-              <div class="section">
-                <div class="section-title">Allocation</div>
-                <div class="text-section">${this._formatText(allocation_comment)}</div>
-              </div>
-            ` : ''}
-
-            <!-- Conclusion -->
-            ${conclusion ? html`
-              <div class="section">
-                <div class="section-title">Conclusion</div>
-                <div class="conclusion-text">${this._formatText(conclusion)}</div>
+                <div class="section-title">Ventes recommandées</div>
+                <div class="sell-list">
+                  ${ventes_recommandees.map(v => html`
+                    <div class="sell-item">
+                      <span class="sell-ticker">${v.ticker}</span>
+                      <span class="sell-urgence ${(v.urgence || '').toLowerCase().replace(/\s+/g, '-')}">${v.urgence || ''}</span>
+                      <span class="sell-reason" title="${v.raison || ''}">${v.raison || ''}</span>
+                      ${v.prix_actuel ? html`<span class="sell-price">${v.prix_actuel}$</span>` : ''}
+                    </div>
+                  `)}
+                </div>
               </div>
             ` : ''}
           </div>

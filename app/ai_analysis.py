@@ -428,177 +428,251 @@ Fournis des analyses détaillées et substantielles pour chaque champ."""
 # PORTFOLIO
 # ============================================================================
 
-def build_portfolio_analysis_prompt(positions, latest_analyses):
+def build_portfolio_analysis_prompt(positions, all_analyses, news_summaries=None, config=None):
     """
     Construit le prompt pour l'analyse globale du portefeuille.
-    
+    Inclut toutes les actions surveillées, les news et le profil investisseur.
+
     Args:
         positions: Liste des positions ouvertes avec leurs données
-        latest_analyses: Dict des dernières analyses par ticker
-    
+        all_analyses: Dict des dernières analyses par ticker (tous les tickers surveillés)
+        news_summaries: Dict des résumés de news par catégorie
+        config: Configuration avec budget, risk_level, investment_objective
+
     Returns:
         str: Prompt formaté pour l'analyse IA du portefeuille
     """
     from datetime import datetime
-    
-    total_invested = sum(p.get('entry_price', 0) * p.get('quantity', 1) for p in positions)
-    total_value = sum(p.get('current_price', p.get('entry_price', 0)) * p.get('quantity', 1) for p in positions)
+
+    config = config or {}
+    news_summaries = news_summaries or {}
+
+    # Budget et profil
+    budget = config.get('budget', 10000)
+    budget_currency = config.get('budget_currency', 'CHF')
+    risk_level = config.get('risk_level', 'modere')
+    objective = config.get('investment_objective', 'croissance long terme')
+    trading = config.get('trading', {})
+    buy_commission = trading.get('buy_commission', 10)
+    sell_commission = trading.get('sell_commission', 12)
+    commission_currency = trading.get('commission_currency', 'CHF')
+
+    # Portfolio totals
+    total_invested = sum(p.get('entry_price', 0) * p.get('quantity', 1) for p in positions) if positions else 0
+    total_value = sum(p.get('current_price', p.get('entry_price', 0)) * p.get('quantity', 1) for p in positions) if positions else 0
     total_pnl = total_value - total_invested
     total_pnl_percent = (total_pnl / total_invested * 100) if total_invested > 0 else 0
-    
-    prompt = f"""# ANALYSE DE PORTEFEUILLE - CONSEILS DU JOUR
+
+    # Owned tickers
+    owned_tickers = set(p.get('ticker', '') for p in positions) if positions else set()
+
+    prompt = f"""# CONSEILLER FINANCIER PERSONNEL - ANALYSE QUOTIDIENNE
 Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-## INSTRUCTIONS
-Tu es un gestionnaire de portefeuille senior. Analyse mon portefeuille actuel et fournis:
-1. Un résumé global de la situation
-2. Des conseils actionnables pour aujourd'hui
-3. Un avis position par position
+## TON ROLE
+Tu es mon conseiller financier personnel. Je suivrai tes recommandations directement.
+Dis-moi clairement quoi ACHETER, VENDRE, et CONSERVER aujourd'hui.
+Maximise la probabilite de rendement positif. Recommande uniquement des achats a haute conviction.
 
-## APERÇU DU PORTEFEUILLE
+## PROFIL INVESTISSEUR
+- **Budget disponible:** {budget:,.0f} {budget_currency}
+- **Niveau de risque:** {risk_level}
+- **Objectif:** {objective}
+- **Commissions:** achat {buy_commission} {commission_currency}, vente {sell_commission} {commission_currency}
+
+## PORTEFEUILLE ACTUEL ({len(positions)} positions)
 - **Capital investi:** {total_invested:,.2f}$
 - **Valeur actuelle:** {total_value:,.2f}$
 - **P&L Total:** {total_pnl:+,.2f}$ ({total_pnl_percent:+.2f}%)
-- **Nombre de positions:** {len(positions)}
-
-## MES POSITIONS ACTUELLES
 """
 
-    for i, pos in enumerate(positions, 1):
-        ticker = pos.get('ticker', 'N/A')
-        entry_price = pos.get('entry_price', 0)
-        current_price = pos.get('current_price', entry_price)
-        quantity = pos.get('quantity', 1)
-        pnl_value = pos.get('pnl_value', 0)
-        pnl_percent = pos.get('pnl_percent', 0)
-        stop_loss = pos.get('stop_loss')
-        take_profit_1 = pos.get('take_profit_1')
-        entry_date = pos.get('entry_date', '')
-        
-        # Récupérer l'analyse récente si disponible
-        analysis = latest_analyses.get(ticker, {})
-        signal = analysis.get('signal', 'N/A')
-        confidence = analysis.get('confidence', 'N/A')
-        summary = analysis.get('summary', '')[:200] if analysis.get('summary') else ''
-        
-        # Indicateurs
-        indicators = analysis.get('indicators', {})
-        rsi = indicators.get('rsi', 'N/A')
-        macd_hist = indicators.get('macd_histogram', 'N/A')
-        
-        prompt += f"""
-### {i}. {ticker}
-- **Entrée:** {entry_price:.2f}$ le {entry_date[:10] if entry_date else 'N/A'}
-- **Prix actuel:** {current_price:.2f}$
-- **Quantité:** {quantity}
-- **P&L:** {pnl_value:+.2f}$ ({pnl_percent:+.2f}%)
-- **Stop-Loss:** {f'{stop_loss:.2f}$' if stop_loss else 'Non défini'}
-- **Take-Profit:** {f'{take_profit_1:.2f}$' if take_profit_1 else 'Non défini'}
-- **Signal AI récent:** {signal} (Conviction: {confidence})
-- **RSI:** {rsi} | **MACD Hist:** {macd_hist}
-- **Analyse récente:** {summary}...
+    if positions:
+        prompt += "\n### Positions detaillees\n"
+        for i, pos in enumerate(positions, 1):
+            ticker = pos.get('ticker', 'N/A')
+            entry_price = pos.get('entry_price', 0)
+            current_price = pos.get('current_price', entry_price)
+            quantity = pos.get('quantity', 1)
+            pnl_value = pos.get('pnl_value', 0)
+            pnl_percent = pos.get('pnl_percent', 0)
+            stop_loss = pos.get('stop_loss')
+            take_profit_1 = pos.get('take_profit_1')
+            entry_date = pos.get('entry_date', '')
+
+            analysis = all_analyses.get(ticker, {})
+            signal = analysis.get('signal', 'N/A')
+            confidence = analysis.get('confidence', 'N/A')
+            summary = (analysis.get('summary', '') or '')[:150]
+            indicators = analysis.get('indicators', {})
+            rsi = indicators.get('rsi', 'N/A')
+            macd_hist = indicators.get('macd_histogram', 'N/A')
+
+            prompt += f"""
+{i}. **{ticker}** | Entree: {entry_price:.2f}$ ({entry_date[:10] if entry_date else '?'}) | Actuel: {current_price:.2f}$ | Qte: {quantity}
+   P&L: {pnl_value:+.2f}$ ({pnl_percent:+.2f}%) | SL: {f'{stop_loss:.2f}$' if stop_loss else '-'} | TP: {f'{take_profit_1:.2f}$' if take_profit_1 else '-'}
+   Signal: {signal} ({confidence}) | RSI: {rsi} | MACD: {macd_hist}
+   {summary}
 """
+    else:
+        prompt += "\nAucune position ouverte - recommande des achats initiaux.\n"
+
+    # Non-owned tickers
+    non_owned = {t: a for t, a in all_analyses.items() if t not in owned_tickers}
+    if non_owned:
+        prompt += f"\n## ACTIONS SURVEILLEES NON DETENUES ({len(non_owned)} tickers)\n"
+        for ticker, analysis in sorted(non_owned.items()):
+            signal = analysis.get('signal', 'N/A')
+            confidence = analysis.get('confidence', 'N/A')
+            price = analysis.get('price', 0) or 0
+            change_1d = analysis.get('change_1d', 0) or 0
+            sector = analysis.get('sector', 'N/A')
+            indicators = analysis.get('indicators', {})
+            rsi = indicators.get('rsi', 'N/A')
+            summary = (analysis.get('summary', '') or '')[:100]
+            prompt += f"- **{ticker}** [{sector}]: {signal} ({confidence}) | {price:.2f}$ | 1j: {change_1d:+.2f}% | RSI: {rsi} | {summary}\n"
+
+    # News summaries
+    if news_summaries:
+        prompt += "\n## ACTUALITES DU JOUR\n"
+        for category, data in news_summaries.items():
+            if category == 'market_daily_summary':
+                continue
+            summary_text = data.get('summary', '') if isinstance(data, dict) else str(data)
+            if summary_text:
+                prompt += f"### {category}\n{summary_text[:400]}\n\n"
 
     prompt += f"""
 ---
 
-## FORMAT DE RÉPONSE - JSON OBLIGATOIRE
+## FORMAT DE REPONSE - JSON OBLIGATOIRE
 
-Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après, sans balises markdown.
-Respecte EXACTEMENT ce schéma:
+Reponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou apres, sans balises markdown.
 
 {{
   "date": "{datetime.now().strftime('%Y-%m-%d')}",
   "resume_global": {{
     "etat_portfolio": "Sain | Attention | Critique",
-    "tendance": "Haussière | Baissière | Mixte",
-    "synthese": "3-4 phrases décrivant l'état global du portefeuille, les points d'attention majeurs et la direction générale",
-    "score_sante": 75
+    "tendance": "Haussiere | Baissiere | Mixte",
+    "score_sante": 75,
+    "resume": "2-3 phrases courtes sur l'etat actuel du portefeuille, performance globale, et orientation strategique recommandee."
   }},
-  "actions_du_jour": {{
-    "priorite_haute": ["Action urgente 1", "Action urgente 2"],
-    "a_surveiller": ["Point de surveillance 1", "Point de surveillance 2"],
-    "opportunites": ["Opportunité détectée si applicable"]
-  }},
+  "plan_action": [
+    "Vendre GCTS immediatement a 1.16$ - stop-loss proche, liberer 580$",
+    "Alleger MU de 50% a 101$ - prendre profits +1.15%, liberer 415$",
+    "Acheter NOC 5 actions a 692$ avec SL 645$ objectif 780$ - defense premium",
+    "Acheter ENOV 100 actions a 22$ avec SL 19.5$ objectif 48.50$ - rebond healthcare",
+    "Acheter MA 4 actions a 538$ avec SL 505$ objectif 620$ - paiements survendu",
+    "Surveiller TTWO - couper si cassure 210$, sinon conserver pour rebond >225$",
+    "Conserver LMT, NVDA, GOOG - momentum intact, ne pas renforcer"
+  ],
+  "achats_recommandes": [
+    {{
+      "ticker": "NVDA",
+      "raison": "1 phrase: pourquoi acheter maintenant",
+      "nombre_actions": 15,
+      "prix_entree": 130.50,
+      "stop_loss": 122.00,
+      "objectif": 145.00,
+      "conviction": "Forte | Moyenne"
+    }}
+  ],
+  "ventes_recommandees": [
+    {{
+      "ticker": "GCTS",
+      "raison": "1 phrase: pourquoi vendre",
+      "prix_actuel": 1.16,
+      "stop_loss": 0.95,
+      "urgence": "Immediate | Cette semaine | Surveiller"
+    }}
+  ],
   "conseils_positions": [
     {{
       "ticker": "AAPL",
       "action": "CONSERVER | RENFORCER | ALLEGER | VENDRE | SURVEILLER",
       "urgence": "Haute | Moyenne | Faible",
-      "conseil": "Conseil spécifique et actionnable pour cette position",
-      "niveau_cle": "Prix important à surveiller",
-      "raison": "Justification basée sur l'analyse technique et fondamentale"
+      "conseil": "Conseil actionnable court",
+      "niveau_cle": "Prix important",
+      "raison": "Justification technique courte"
     }}
   ],
-  "allocation": {{
-    "commentaire": "Commentaire sur la diversification et l'équilibre du portefeuille",
-    "suggestion": "Suggestion d'ajustement si nécessaire"
+  "projections": {{
+    "expected_pnl_1w": 2.5,
+    "expected_pnl_1m": 8.0,
+    "expected_pnl_1y": 25.0,
+    "confidence_level": "Moyenne",
+    "commentary": "Base des projections en 1-2 phrases"
   }},
   "risques_portfolio": {{
-    "risque_principal": "Le risque majeur identifié sur l'ensemble du portefeuille",
-    "exposition": "Commentaire sur l'exposition sectorielle ou géographique",
-    "correlation": "Niveau de corrélation entre les positions"
-  }},
-  "conclusion": "Synthèse finale: que faire aujourd'hui, quoi surveiller cette semaine"
+    "risque_principal": "Risque majeur identifie en 1 phrase"
+  }}
 }}
 
-IMPORTANT:
-- Retourne UNIQUEMENT le JSON, pas de texte explicatif
-- Un conseil par position dans conseils_positions
-- Les conseils doivent être actionnables et précis
-- Priorise les actions selon l'urgence
-- Assure-toi que le JSON est COMPLET et VALIDE
+REGLES CRITIQUES:
+- Retourne UNIQUEMENT le JSON valide et COMPLET
+- resume_global.resume: 2-3 phrases courtes sur l'etat du portefeuille, performance globale, et orientation strategique. OBLIGATOIRE.
+- plan_action: 3-7 etapes CONCRETES et dans l'ORDRE DE PRIORITE. Chaque etape commence par un verbe d'action (Vendre, Acheter, Alleger, Surveiller, Conserver). Pour les achats, TOUJOURS indiquer le NOMBRE D'ACTIONS (ex: "Acheter NOC 5 actions a 692$"). Inclure ticker, prix et raison courte. C'est la PARTIE LA PLUS IMPORTANT - l'investisseur suivra ces etapes dans l'ordre.
+- achats_recommandes: SEULEMENT des achats haute conviction, budget total <= {budget} {budget_currency}. Pour chaque achat, calculer le NOMBRE D'ACTIONS recommande (nombre_actions) base sur le budget disponible et le prix d'entree.
+- ventes_recommandees: positions a liquider ou alleger avec urgence et raison
+- Chaque achat DOIT avoir un stop_loss (proteger le capital)
+- Considere les commissions ({buy_commission}+{sell_commission} {commission_currency}) dans la rentabilite
+- Ne recommande PAS d'acheter un ticker deja en portefeuille (utilise RENFORCER dans conseils_positions)
+- projections: % attendus si on suit tes recommandations (1 semaine, 1 mois, 1 an)
+- Priorise le momentum recent et les catalyseurs news
+- Sois DIRECT et CONCIS - pas de disclaimers, pas de langage vague
 """
-    
+
     return prompt
 
 
-def generate_portfolio_analysis(positions, latest_analyses, model, num_threads=12):
+def generate_portfolio_analysis(positions, all_analyses, news_summaries=None, config=None, model=None, num_threads=12):
     """
-    Génère l'analyse du portefeuille via Claude API (avec fallback Ollama).
-    
+    Genere l'analyse du portefeuille via Claude API.
+
     Args:
         positions: Liste des positions ouvertes
-        latest_analyses: Dict des dernières analyses par ticker
+        all_analyses: Dict des dernières analyses par ticker (tous les tickers)
+        news_summaries: Dict des résumés de news
+        config: Configuration avec budget, risk, objective
         model: Modèle (ignoré, utilise config Claude)
         num_threads: Ignoré (compatibilité)
-    
+
     Returns:
         tuple: (analyse_json, temps_écoulé) ou (None, 0) en cas d'erreur
     """
     from config import CLAUDE_CONFIG
-    
-    if not positions:
-        print("⚠️ Aucune position ouverte à analyser")
-        return None, 0
-    
-    print(f"🤖 Analyse portfolio Sonnet ({len(positions)} positions)...")
-    
-    prompt = build_portfolio_analysis_prompt(positions, latest_analyses)
+
+    n_positions = len(positions) if positions else 0
+    n_analyses = len(all_analyses) if all_analyses else 0
+
+    print(f"🤖 Analyse portfolio Sonnet ({n_positions} positions, {n_analyses} tickers surveilles)...")
+
+    prompt = build_portfolio_analysis_prompt(positions, all_analyses, news_summaries, config)
     portfolio_config = CLAUDE_CONFIG['portfolio']
-    
-    system_prompt = """Tu es un gestionnaire de portefeuille expérimenté avec 20 ans d'expérience.
 
-Tu analyses les positions d'un investisseur et fournis des conseils actionnables.
-Tu réponds UNIQUEMENT en JSON valide, sans texte avant ou après, sans balises markdown.
-Tu priorises:
-- La gestion du risque et préservation du capital
-- Des conseils précis et justifiés pour chaque position
-- L'identification d'opportunités d'optimisation
-- L'analyse de la diversification et corrélation
+    system_prompt = """Tu es un conseiller financier expert avec 20 ans d'experience en gestion de portefeuille.
 
-Tu fournis des analyses DÉTAILLÉES et SUBSTANTIELLES."""
-    
+L'investisseur suivra tes recommandations directement. Ta priorite absolue: maximiser la probabilite de rendement positif.
+
+Tu utilises:
+- Analyse technique (RSI, MACD, supports/resistances, volumes, Bollinger Bands)
+- Signaux fondamentaux (valorisation, croissance, momentum sectoriel)
+- Sentiment des news et catalyseurs recents
+- Gestion du risque (stop-loss obligatoire, diversification sectorielle)
+
+Tu reponds UNIQUEMENT en JSON valide, sans texte avant ou apres, sans balises markdown.
+Tu recommandes uniquement des achats a haute conviction avec un ratio risque/rendement favorable.
+Tu es direct et actionnable. Pas de disclaimers ou de langage vague."""
+
     try:
         response, elapsed = call_claude_api(
             prompt=prompt,
             model=portfolio_config['model'],
             max_tokens=portfolio_config['max_tokens'],
-            temperature=portfolio_config['temperature'],
+            temperature=portfolio_config.get('temperature', 0.3),
             system_prompt=system_prompt,
-            timeout=120  # Portfolio plus long, 120s au lieu de 60s
+            timeout=120
         )
-        
+
         # Clean markdown
         clean = response.strip()
         if clean.startswith('```'):
@@ -608,17 +682,17 @@ Tu fournis des analyses DÉTAILLÉES et SUBSTANTIELLES."""
             if lines and lines[-1].strip() == '```':
                 lines = lines[:-1]
             clean = '\n'.join(lines)
-        
+
         # Parse JSON
         try:
             analysis_json = json.loads(clean)
-            print(f"✅ Portfolio analysé ({elapsed:.1f}s)")
+            print(f"✅ Portfolio analyse ({elapsed:.1f}s)")
             return analysis_json, elapsed
         except json.JSONDecodeError as e:
             print(f"⚠️ Erreur JSON: {e}")
-            print(f"   Réponse: {clean[:200]}...")
+            print(f"   Reponse: {clean[:200]}...")
             return {'raw_response': response, 'error': 'JSON parse failed'}, elapsed
-            
+
     except Exception as e:
         print(f"❌ Erreur: {e}")
         return None, 0

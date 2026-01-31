@@ -38,7 +38,10 @@ export class PortfolioChart extends BaseComponent {
     error: { type: String },
     
     // API
-    apiEndpoint: { type: String }
+    apiEndpoint: { type: String },
+
+    // Projections from AI analysis
+    projections: { type: Object }
   };
   
   static styles = [
@@ -390,6 +393,8 @@ export class PortfolioChart extends BaseComponent {
     this.pnlData = [];
     this.invested = [];
     
+    this.projections = null;
+
     this._chart = null;
     this._canvasCtx = null;
   }
@@ -435,6 +440,9 @@ export class PortfolioChart extends BaseComponent {
   }
   
   updated(changedProperties) {
+    if (changedProperties.has('projections')) {
+      requestAnimationFrame(() => this._drawChart());
+    }
     if (changedProperties.has('mode') || changedProperties.has('timeRangeIndex')) {
       this._updateMinMax();
       this._drawChart();
@@ -556,12 +564,15 @@ export class PortfolioChart extends BaseComponent {
     // Clear
     ctx.clearRect(0, 0, width, height);
     
-    const padding = { top: 10, bottom: 10, left: 5, right: 5 };
+    const hasProjection = this.projections && this.mode === 'pnl';
+    const padding = { top: 10, bottom: 10, left: 5, right: hasProjection ? 55 : 5 };
     
     switch (this.mode) {
       case 'pnl':
         // P&L with colored fill and neutral line
         this._drawPnlChart(ctx, width, height, padding, this.pnlData);
+        // Draw projection dashed line if available
+        this._drawProjectionLine(ctx, width, height, padding, this.pnlData);
         break;
         
       case 'value':
@@ -821,6 +832,67 @@ export class PortfolioChart extends BaseComponent {
     ctx.setLineDash([]);
   }
   
+  _drawProjectionLine(ctx, width, height, padding, data) {
+    if (!this.projections || !data || data.length < 2) return;
+
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    const lastValue = data[data.length - 1];
+    const min = Math.min(...data, 0);
+    const max = Math.max(...data, 0);
+    const range = max - min || 1;
+
+    // Last point position
+    const lastX = padding.left + chartWidth;
+    const lastY = padding.top + chartHeight - ((lastValue - min) / range) * chartHeight;
+
+    // Determine projection target based on current time range
+    const days = this.currentTimeRange.days;
+    let projPct = null;
+    if (days <= 7) {
+      projPct = this.projections.expected_pnl_1w;
+    } else if (days <= 30) {
+      projPct = this.projections.expected_pnl_1m;
+    } else {
+      projPct = this.projections.expected_pnl_1y;
+    }
+
+    if (projPct == null) return;
+
+    // Project from current last P&L value
+    const projectedValue = lastValue + (projPct - (this.changePercent || 0));
+    const projectedY = padding.top + chartHeight - ((projectedValue - min) / range) * chartHeight;
+
+    // Clamp Y within chart bounds
+    const clampedY = Math.max(padding.top, Math.min(height - padding.bottom, projectedY));
+
+    // Draw dashed projection line from last data point extending ~15% of chart width
+    const projEndX = lastX + chartWidth * 0.12;
+
+    ctx.beginPath();
+    ctx.setLineDash([6, 4]);
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(projEndX, clampedY);
+    ctx.strokeStyle = projectedValue >= lastValue ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw small dot at projection end
+    ctx.beginPath();
+    ctx.arc(projEndX, clampedY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = projectedValue >= lastValue ? 'rgba(34, 197, 94, 0.9)' : 'rgba(239, 68, 68, 0.9)';
+    ctx.fill();
+
+    // Draw projected % label
+    ctx.font = '700 10px JetBrains Mono, monospace';
+    ctx.fillStyle = projectedValue >= lastValue ? 'rgba(34, 197, 94, 0.9)' : 'rgba(239, 68, 68, 0.9)';
+    const label = `${projPct >= 0 ? '+' : ''}${projPct.toFixed(1)}%`;
+    ctx.fillText(label, projEndX + 5, clampedY + 3);
+  }
+
   _formatValue(value) {
     if (value === undefined || value === null) return '--';
     const sign = value >= 0 ? '' : '';

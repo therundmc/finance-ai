@@ -248,9 +248,25 @@ class PortfolioAnalysis(Base):
     actions_watch = Column(JSON)  # Points à surveiller
     actions_opportunities = Column(JSON)  # Opportunités
     
+    # Plan d'action (JSON array of strings - numbered steps)
+    plan_action = Column(JSON)  # ["Vendre GCTS...", "Acheter NOC...", ...]
+
+    # Achats recommandés (JSON array)
+    achats_recommandes = Column(JSON)  # [{ticker, raison, budget_suggere, prix_entree, stop_loss, objectif, conviction}]
+
+    # Ventes recommandées (JSON array)
+    ventes_recommandees = Column(JSON)  # [{ticker, raison, prix_actuel, stop_loss, urgence}]
+
     # Conseils par position (JSON array)
     position_advice = Column(JSON)  # [{ticker, action, conseil, urgence, raison}]
-    
+
+    # Projections (JSON)
+    projections = Column(JSON)  # {expected_pnl_1w, expected_pnl_1m, expected_pnl_1y, confidence_level, commentary}
+
+    # Baseline for projection tracking
+    baseline_portfolio_value = Column(Float)  # Portfolio value at time of projection
+    baseline_pnl_pct = Column(Float)  # P&L % at time of projection
+
     # Risques et allocation
     allocation_comment = Column(Text)
     main_risk = Column(Text)
@@ -272,11 +288,21 @@ class PortfolioAnalysis(Base):
             'portfolio_state': self.portfolio_state,
             'portfolio_trend': self.portfolio_trend,
             'health_score': self.health_score,
+            'resume_global': {
+                'etat_portfolio': self.portfolio_state,
+                'tendance': self.portfolio_trend,
+                'score_sante': self.health_score,
+                'resume': self.summary or ''
+            },
             'summary': self.summary,
+            'plan_action': self.plan_action or [],
             'actions_high_priority': self.actions_high_priority or [],
             'actions_watch': self.actions_watch or [],
             'actions_opportunities': self.actions_opportunities or [],
+            'achats_recommandes': self.achats_recommandes or [],
+            'ventes_recommandees': self.ventes_recommandees or [],
             'position_advice': self.position_advice or [],
+            'projections': self.projections or {},
             'allocation_comment': self.allocation_comment,
             'main_risk': self.main_risk,
             'conclusion': self.conclusion,
@@ -438,6 +464,28 @@ def init_db():
         os.makedirs(db_dir, exist_ok=True)
     
     Base.metadata.create_all(bind=engine)
+
+    # Migrations for existing databases
+    import sqlite3
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    for col in ['achats_recommandes', 'projections', 'plan_action', 'ventes_recommandees']:
+        try:
+            cursor.execute(f"ALTER TABLE portfolio_analyses ADD COLUMN {col} TEXT")
+            conn.commit()
+            print(f"  Migration: {col} column added to portfolio_analyses")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+    # Baseline columns for projection tracking
+    for col in [('baseline_portfolio_value', 'REAL'), ('baseline_pnl_pct', 'REAL')]:
+        try:
+            cursor.execute(f"ALTER TABLE portfolio_analyses ADD COLUMN {col[0]} {col[1]}")
+            conn.commit()
+            print(f"  Migration: {col[0]} column added to portfolio_analyses")
+        except sqlite3.OperationalError:
+            pass
+    conn.close()
+
     print(f"✅ Base de données initialisée: {DATABASE_PATH}")
 
 
@@ -1743,16 +1791,18 @@ def migrate_snapshots_add_global_pnl():
 # PORTFOLIO ANALYSIS FUNCTIONS
 # ============================================
 
-def save_portfolio_analysis(analysis_data: Dict[str, Any], model: str, elapsed_time: float, positions_count: int) -> Optional[PortfolioAnalysis]:
+def save_portfolio_analysis(analysis_data: Dict[str, Any], model: str, elapsed_time: float, positions_count: int, baseline_portfolio_value: float = 0, baseline_pnl_pct: float = 0) -> Optional[PortfolioAnalysis]:
     """
     Sauvegarde une analyse de portefeuille en DB.
-    
+
     Args:
         analysis_data: Données JSON de l'analyse
         model: Modèle utilisé
         elapsed_time: Temps d'analyse
         positions_count: Nombre de positions analysées
-    
+        baseline_portfolio_value: Portfolio value at time of projection
+        baseline_pnl_pct: P&L % at time of projection
+
     Returns:
         PortfolioAnalysis object or None
     """
@@ -1763,17 +1813,23 @@ def save_portfolio_analysis(analysis_data: Dict[str, Any], model: str, elapsed_t
         actions = analysis_data.get('actions_du_jour', {})
         risques = analysis_data.get('risques_portfolio', {})
         allocation = analysis_data.get('allocation', {})
-        
+
         portfolio_analysis = PortfolioAnalysis(
             date=datetime.now(),
             portfolio_state=resume.get('etat_portfolio', 'N/A'),
             portfolio_trend=resume.get('tendance', 'N/A'),
             health_score=resume.get('score_sante', 50),
-            summary=resume.get('synthese', ''),
+            summary=resume.get('resume', resume.get('synthese', '')),  # Use 'resume' field, fallback to 'synthese'
+            plan_action=analysis_data.get('plan_action', []),
             actions_high_priority=actions.get('priorite_haute', []),
             actions_watch=actions.get('a_surveiller', []),
             actions_opportunities=actions.get('opportunites', []),
+            achats_recommandes=analysis_data.get('achats_recommandes', []),
+            ventes_recommandees=analysis_data.get('ventes_recommandees', []),
             position_advice=analysis_data.get('conseils_positions', []),
+            projections=analysis_data.get('projections', {}),
+            baseline_portfolio_value=baseline_portfolio_value,
+            baseline_pnl_pct=baseline_pnl_pct,
             allocation_comment=allocation.get('commentaire', ''),
             main_risk=risques.get('risque_principal', ''),
             conclusion=analysis_data.get('conclusion', ''),
