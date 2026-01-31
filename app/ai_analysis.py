@@ -12,61 +12,80 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 def call_claude_api(prompt, model, max_tokens=256, temperature=0.2, system_prompt=None, timeout=60):
     """
-    Appelle l'API Claude avec fallback vers Ollama local
-    
+    Appelle l'API Claude avec retry sur rate limit (429) et fallback vers Ollama local.
+
     Args:
         timeout: Timeout en secondes (défaut 60, augmenter pour portfolio)
-    
+
     Returns:
         tuple: (response_text, elapsed_time)
     """
     if not ANTHROPIC_API_KEY:
         print("⚠️ ANTHROPIC_API_KEY manquante - Fallback vers Ollama")
         return _fallback_ollama(prompt, model, max_tokens, temperature, system_prompt)
-    
+
     if not ANTHROPIC_API_KEY.startswith('sk-ant-'):
         print(f"⚠️ ANTHROPIC_API_KEY invalide - Fallback vers Ollama")
         return _fallback_ollama(prompt, model, max_tokens, temperature, system_prompt)
-    
+
     start_time = time.time()
-    
+
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json"
     }
-    
+
     data = {
         "model": model,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "messages": [{"role": "user", "content": prompt}]
     }
-    
+
     if system_prompt:
         data["system"] = system_prompt
-    
-    try:
-        response = requests.post(ANTHROPIC_API_URL, headers=headers, json=data, timeout=timeout)
-        response.raise_for_status()
-        result = response.json()
-        elapsed_time = time.time() - start_time
-        text = result["content"][0]["text"] if "content" in result else ""
-        return text, elapsed_time
-    except requests.exceptions.HTTPError as e:
-        # Erreur HTTP - tenter fallback Ollama
-        error_detail = ""
+
+    max_retries = 5
+    for attempt in range(max_retries):
         try:
-            error_detail = response.json()
-        except:
-            error_detail = response.text
-        print(f"❌ Erreur API Claude ({response.status_code}): {error_detail}")
-        print(f"🔄 Tentative fallback vers Ollama local...")
-        return _fallback_ollama(prompt, model, max_tokens, temperature, system_prompt)
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Erreur API Claude: {e}")
-        print(f"🔄 Tentative fallback vers Ollama local...")
-        return _fallback_ollama(prompt, model, max_tokens, temperature, system_prompt)
+            response = requests.post(ANTHROPIC_API_URL, headers=headers, json=data, timeout=timeout)
+
+            # Handle rate limit (429) with retry
+            if response.status_code == 429:
+                retry_after = response.headers.get('retry-after', '')
+                try:
+                    wait_time = int(retry_after)
+                except (ValueError, TypeError):
+                    wait_time = 30 + (attempt * 15)
+
+                print(f"⏳ Rate limit atteint (429) - attente {wait_time}s avant retry ({attempt + 1}/{max_retries})...")
+                time.sleep(wait_time)
+                continue
+
+            response.raise_for_status()
+            result = response.json()
+            elapsed_time = time.time() - start_time
+            text = result["content"][0]["text"] if "content" in result else ""
+            return text, elapsed_time
+
+        except requests.exceptions.HTTPError as e:
+            error_detail = ""
+            try:
+                error_detail = response.json()
+            except:
+                error_detail = response.text
+            print(f"❌ Erreur API Claude ({response.status_code}): {error_detail}")
+            print(f"🔄 Tentative fallback vers Ollama local...")
+            return _fallback_ollama(prompt, model, max_tokens, temperature, system_prompt)
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Erreur API Claude: {e}")
+            print(f"🔄 Tentative fallback vers Ollama local...")
+            return _fallback_ollama(prompt, model, max_tokens, temperature, system_prompt)
+
+    # All retries exhausted
+    print(f"❌ Rate limit: {max_retries} retries epuises - Fallback vers Ollama")
+    return _fallback_ollama(prompt, model, max_tokens, temperature, system_prompt)
 
 
 def _fallback_ollama(prompt, model, max_tokens, temperature, system_prompt=None):
@@ -219,7 +238,7 @@ def build_analysis_prompt(ticker, hist_1mo, info, indicators, advanced=False,
                           news=None, calendar=None, recommendations=None,
                           alpha_vantage=None, fred_macro=None):
     """
-    Construit prompt COMPLET pour analyse Sonnet
+    Construit prompt COMPLET pour analyse Approfondie
     Ajoute alpha_vantage et fred_macro aux paramètres existants
     """
     
@@ -602,4 +621,127 @@ Tu fournis des analyses DÉTAILLÉES et SUBSTANTIELLES."""
             
     except Exception as e:
         print(f"❌ Erreur: {e}")
+        return None, 0
+
+
+def build_market_summary_prompt(analyses_results):
+    """
+    Build prompt for daily market summary from completed analyses.
+
+    Args:
+        analyses_results: List of analysis result dicts from analyze_stock()
+
+    Returns:
+        str: Prompt for Claude
+    """
+    # Group by sector
+    by_sector = {}
+    for a in analyses_results:
+        sector = a.get('sector', 'N/A')
+        if sector not in by_sector:
+            by_sector[sector] = []
+        by_sector[sector].append(a)
+
+    prompt = f"""# RESUME QUOTIDIEN DU MARCHE - {datetime.now().strftime('%Y-%m-%d')}
+
+## INSTRUCTIONS
+Tu es un stratege de marche senior. A partir des analyses ci-dessous, genere un resume quotidien synthetique:
+1. Quelles actions sont les plus attractives a acheter aujourd'hui et pourquoi
+2. Quelles actions devraient etre vendues et pourquoi
+3. Quels secteurs performent le mieux / le moins bien
+4. Vue d'ensemble du marche
+
+## ANALYSES DU JOUR ({len(analyses_results)} actions)
+"""
+
+    for sector, analyses in by_sector.items():
+        prompt += f"\n### Secteur: {sector}\n"
+        for a in analyses:
+            signal = a.get('signal', 'N/A')
+            confidence = a.get('confidence', 'N/A')
+            change_1d = a.get('change_1d', 0) or 0
+            price = a.get('price', 0) or 0
+            summary = (a.get('summary', '') or '')[:150]
+            prompt += f"- **{a['ticker']}**: {signal} ({confidence}) | Prix: {price:.2f} | Var 1j: {change_1d:+.2f}% | {summary}\n"
+
+    prompt += """
+---
+
+## FORMAT DE REPONSE - JSON OBLIGATOIRE
+
+Reponds UNIQUEMENT avec un objet JSON valide:
+
+{
+  "date": "YYYY-MM-DD",
+  "market_mood": "Haussier | Baissier | Mixte | Neutre",
+  "summary": "3-4 phrases resumant la journee de marche",
+  "top_picks": [
+    {"ticker": "AAPL", "action": "ACHETER", "raison": "Pourquoi cette action est attractive"}
+  ],
+  "sells": [
+    {"ticker": "XYZ", "action": "VENDRE", "raison": "Pourquoi vendre"}
+  ],
+  "sector_performance": [
+    {"sector": "Technology", "trend": "Haussier", "comment": "Bref commentaire"}
+  ],
+  "key_levels": "Niveaux importants a surveiller"
+}
+"""
+    return prompt
+
+
+def generate_market_summary(analyses_results):
+    """
+    Generate daily market summary using Claude.
+
+    Args:
+        analyses_results: List of successful analysis result dicts
+
+    Returns:
+        tuple: (summary_dict, elapsed_time) or (None, 0)
+    """
+    from config import CLAUDE_CONFIG
+
+    if not analyses_results:
+        return None, 0
+
+    print(f"📋 Generation du resume marche ({len(analyses_results)} analyses)...")
+
+    prompt = build_market_summary_prompt(analyses_results)
+
+    portfolio_config = CLAUDE_CONFIG.get('portfolio', CLAUDE_CONFIG.get('deep_analysis'))
+
+    system_prompt = """Tu es un stratege de marche senior.
+Tu resumes les analyses du jour et identifies les meilleures opportunites.
+Tu reponds UNIQUEMENT en JSON valide, sans texte avant ou apres, sans balises markdown."""
+
+    try:
+        response, elapsed = call_claude_api(
+            prompt=prompt,
+            model=portfolio_config['model'],
+            max_tokens=portfolio_config.get('max_tokens', 2048),
+            temperature=0.3,
+            system_prompt=system_prompt,
+            timeout=90
+        )
+
+        # Clean markdown wrappers
+        clean = response.strip()
+        if clean.startswith('```'):
+            lines = clean.split('\n')
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            clean = '\n'.join(lines)
+
+        try:
+            summary_json = json.loads(clean)
+            print(f"✅ Resume marche genere ({elapsed:.1f}s)")
+            return summary_json, elapsed
+        except json.JSONDecodeError as e:
+            print(f"⚠️ Erreur JSON resume marche: {e}")
+            return {'raw_response': response, 'error': 'JSON parse failed'}, elapsed
+    except Exception as e:
+        print(f"❌ Erreur generation resume marche: {e}")
         return None, 0

@@ -13,6 +13,7 @@ export class ToastNotification extends LitElement {
         visible: { type: Boolean, reflect: true }
     };
 
+
     static styles = css`
         :host {
             position: fixed;
@@ -30,10 +31,10 @@ export class ToastNotification extends LitElement {
             align-items: center;
             gap: 10px;
             padding: 12px 16px;
-            background: var(--bg-secondary, #1f1b18);
-            border: 2px solid var(--border-color, #3a332c);
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            background: rgba(255,255,255,0.18);
+            box-shadow: 0 2px 8px 0 rgba(31,38,135,0.10);
+            backdrop-filter: blur(14px) saturate(160%);
+            -webkit-backdrop-filter: blur(14px) saturate(160%);
             color: var(--text-primary, #f5f0eb);
             font-size: 0.85rem;
             font-weight: 500;
@@ -41,7 +42,14 @@ export class ToastNotification extends LitElement {
             pointer-events: auto;
             animation: slideIn 0.3s ease;
             max-width: 320px;
-            backdrop-filter: blur(8px);
+            margin-left: 0;
+            margin-right: 0;
+            overflow-x: visible;
+        }
+
+        :host([theme="dark"]) .toast {
+            background: rgba(31, 27, 24, 0.5);
+            box-shadow: 0 2px 8px 0 rgba(0,0,0,0.13);
         }
 
         .toast.hiding {
@@ -70,11 +78,6 @@ export class ToastNotification extends LitElement {
             }
         }
 
-        .toast-icon {
-            font-size: 1.1rem;
-            flex-shrink: 0;
-        }
-
         .toast-message {
             flex: 1;
             line-height: 1.4;
@@ -101,7 +104,7 @@ export class ToastNotification extends LitElement {
             border-left: 4px solid var(--success, #06d6a0);
         }
 
-        .toast.success .toast-icon {
+        .toast.success {
             color: var(--success, #06d6a0);
         }
 
@@ -109,7 +112,7 @@ export class ToastNotification extends LitElement {
             border-left: 4px solid var(--danger, #ff3366);
         }
 
-        .toast.error .toast-icon {
+        .toast.error {
             color: var(--danger, #ff3366);
         }
 
@@ -117,7 +120,7 @@ export class ToastNotification extends LitElement {
             border-left: 4px solid var(--brand-warm, #ffb347);
         }
 
-        .toast.warning .toast-icon {
+        .toast.warning {
             color: var(--brand-warm, #ffb347);
         }
 
@@ -125,7 +128,7 @@ export class ToastNotification extends LitElement {
             border-left: 4px solid var(--brand-secondary, #8b5cf6);
         }
 
-        .toast.info .toast-icon {
+        .toast.info {
             color: var(--brand-secondary, #8b5cf6);
         }
 
@@ -154,16 +157,6 @@ export class ToastNotification extends LitElement {
     constructor() {
         super();
         this._toasts = [];
-    }
-
-    _getIcon(type) {
-        const icons = {
-            success: '✅',
-            error: '❌',
-            warning: '⚠️',
-            info: 'ℹ️'
-        };
-        return icons[type] || icons.info;
     }
 
     show(message, type = 'success', duration = 3000) {
@@ -201,7 +194,6 @@ export class ToastNotification extends LitElement {
         return html`
             ${this._toasts.map(toast => html`
                 <div class="toast ${toast.type} ${toast.hiding ? 'hiding' : ''}" style="position: relative;">
-                    <span class="toast-icon">${this._getIcon(toast.type)}</span>
                     <span class="toast-message">${toast.message}</span>
                     <button class="toast-close" @click=${() => this._handleClose(toast.id)}>×</button>
                     <div class="toast-progress" style="animation-duration: ${toast.duration}ms;"></div>

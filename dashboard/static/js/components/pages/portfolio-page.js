@@ -615,6 +615,16 @@ export class PortfolioPage extends BaseComponent {
                 ></portfolio-chart>
             </div>
 
+            <!-- Portfolio Analysis Card -->
+
+            <div style="margin-bottom: 18px;">
+                <portfolio-analysis-card
+                    .analysis="${this.portfolioAnalysis}"
+                    ?loading="${this.loadingAnalysis}"
+                    theme="${this.theme}"
+                ></portfolio-analysis-card>
+            </div>
+
             <!-- Filter Bar -->
             ${this._renderFilterBar()}
 
@@ -708,15 +718,15 @@ export class PortfolioPage extends BaseComponent {
             <div class="filter-bar">
                 <div class="filter-tabs">
                     <app-button 
-                        variant="filter" 
-                        icon="🟢" 
+                        variant="success" 
+                        label="O"
                         ?active="${this.filter === 'open'}"
                         theme="${this.theme}"
                         @click="${() => this._handleFilterChange('open')}"
                     ></app-button>
                     <app-button 
-                        variant="filter" 
-                        icon="🔴" 
+                        variant="danger" 
+                        label="C"
                         ?active="${this.filter === 'closed'}"
                         theme="${this.theme}"
                         @click="${() => this._handleFilterChange('closed')}"

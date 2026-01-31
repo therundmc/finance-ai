@@ -203,7 +203,7 @@ export class PortfolioAnalysisCard extends BaseComponent {
       /* Main subsection (Tendance, Valorisation, etc.) */
       .text-section .subsection {
         display: block;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         font-weight: 800;
         color: var(--text-primary);
         margin-top: 12px;
@@ -261,7 +261,7 @@ export class PortfolioAnalysisCard extends BaseComponent {
       }
 
       .text-section .points-title .icon {
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         font-weight: 900;
       }
 
@@ -278,10 +278,7 @@ export class PortfolioAnalysisCard extends BaseComponent {
       /* === CONCLUSION === */
       .conclusion-text {
         font-size: 0.9rem;
-        color: var(--text-secondary);
         line-height: 1.7;
-        padding: 12px;
-        background: rgba(139, 92, 246, 0.05);
         border-radius: var(--radius-sm);
       }
 

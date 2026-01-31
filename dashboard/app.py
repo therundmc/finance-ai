@@ -36,6 +36,56 @@ app = Flask(__name__)
 init_db()
 
 
+# ============================================
+# ERROR HANDLERS - Return JSON instead of HTML
+# ============================================
+
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors with JSON response"""
+    return jsonify({
+        'success': False,
+        'error': 'Resource not found',
+        'message': str(error)
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 errors with JSON response"""
+    import traceback
+    error_trace = traceback.format_exc()
+    print(f"❌ Internal Server Error: {error}")
+    print(error_trace)
+    return jsonify({
+        'success': False,
+        'error': 'Internal server error',
+        'message': str(error),
+        'trace': error_trace
+    }), 500
+
+
+@app.errorhandler(Exception)
+def handle_exception(error):
+    """Handle all unhandled exceptions with JSON response"""
+    import traceback
+    error_trace = traceback.format_exc()
+    print(f"❌ Unhandled Exception: {error}")
+    print(error_trace)
+
+    # Return JSON for API routes, HTML for others
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'success': False,
+            'error': type(error).__name__,
+            'message': str(error),
+            'trace': error_trace
+        }), 500
+    else:
+        # Re-raise for non-API routes to use default HTML error page
+        raise
+
+
 @app.route('/')
 def index():
     """Page principale"""
@@ -1025,6 +1075,49 @@ def api_news_summary():
             'success': False,
             'error': str(e),
             'summaries': {}
+        }), 500
+
+
+# ============================================
+# API MARKET DAILY SUMMARY
+# ============================================
+
+@app.route('/api/market/summary')
+def api_market_summary():
+    """
+    Retrieve the latest daily market summary.
+    Generated after all ticker analyses complete.
+    """
+    try:
+        result = get_latest_news_summaries(max_age_minutes=1440)
+
+        if result.get('success') and result.get('summaries'):
+            market_summary = result['summaries'].get('market_daily_summary')
+            if market_summary:
+                try:
+                    parsed = json.loads(market_summary.get('summary', '{}'))
+                    return jsonify({
+                        'success': True,
+                        'summary': parsed,
+                        'generated_at': market_summary.get('generated_at'),
+                        'tickers_analyzed': market_summary.get('article_count', 0)
+                    })
+                except json.JSONDecodeError:
+                    return jsonify({
+                        'success': True,
+                        'summary': {'raw': market_summary.get('summary', '')},
+                        'generated_at': market_summary.get('generated_at')
+                    })
+
+        return jsonify({
+            'success': False,
+            'error': 'No market summary available yet',
+            'summary': None
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 

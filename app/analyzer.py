@@ -4,13 +4,12 @@ import json
 from datetime import datetime, time as dtime
 from concurrent.futures import ThreadPoolExecutor
 import time
-import yfinance as yf
 import pytz
 
 from config import load_config
 from data_fetcher import fetch_stock_data, fetch_enhanced_stock_data, calculate_variations
 from indicators import get_technical_indicators
-from ai_analysis import build_analysis_prompt, generate_analysis, generate_portfolio_analysis
+from ai_analysis import build_analysis_prompt, generate_analysis, generate_portfolio_analysis, generate_market_summary
 from signal_extractor import extract_signal_from_analysis, validate_signal, format_structured_analysis
 from database import (
     save_analysis, init_db, save_all_news_summaries, get_last_analysis_times, 
@@ -216,7 +215,8 @@ def analyze_stock(ticker, model, advanced=False, num_threads=12):
                         'news_analyzed': len(news),
                         'analysis': f"Screening Haiku: Score {screening_result['score']}/100\n{screening_result['reason']}",
                         'raw_response': screening_result['reason'],
-                        'currency': currency_info['currency']
+                        'currency': currency_info['currency'],
+                        'sector': info.get('sector', 'N/A')
                     }
                     
                     save_analysis(analysis_data_db)
@@ -225,6 +225,9 @@ def analyze_stock(ticker, model, advanced=False, num_threads=12):
         
         # === PHASE 2: ANALYSE APPROFONDIE SONNET ===
         print(f"✅ Score screening suffisant - Analyse approfondie Sonnet")
+
+        # Small delay between screening and deep analysis to respect rate limits
+        time.sleep(5)
 
         # 4. Calculer les indicateurs techniques
         indicators = get_technical_indicators(hist_1mo)
@@ -293,7 +296,8 @@ def analyze_stock(ticker, model, advanced=False, num_threads=12):
             'news_analyzed': len(news) if news else 0,
             'analysis': formatted_text if formatted_text else analysis_text,
             'structured_data': structured_data,  # Données JSON structurées si disponibles
-            'raw_response': analysis_text  # Réponse brute pour debug
+            'raw_response': analysis_text,  # Réponse brute pour debug
+            'sector': info.get('sector', 'N/A')
         }
 
         # Sauvegarder en base de données SQLite
@@ -418,26 +422,30 @@ def run_analysis(market_filter=None):
 
     analysis_count = 0
     successful_count = 0
-    
+    successful_results = []
+
     if parallel and len(tickers) > 1:
-        with ThreadPoolExecutor(max_workers=min(4, len(tickers))) as executor:
+        # Limit to 2 workers to avoid rate limits (each analysis = 2 API calls)
+        with ThreadPoolExecutor(max_workers=min(2, len(tickers))) as executor:
             futures = [executor.submit(analyze_stock, t, model, advanced, num_threads) for t in tickers]
             for future in futures:
                 result = future.result()
                 analysis_count += 1
                 if result:
                     successful_count += 1
+                    successful_results.append(result)
     else:
         for ticker in tickers:
             result = analyze_stock(ticker, model, advanced, num_threads)
             analysis_count += 1
             if result:
                 successful_count += 1
-            time.sleep(1)
+                successful_results.append(result)
+            time.sleep(3)  # Wait between analyses to respect rate limits
 
     total_time = time.time() - start_total
     end_datetime = datetime.now()
-    
+
     print(f"\n{'='*60}")
     print(f"🤖 RÉCAP AI ANALYZER")
     print(f"{'='*60}")
@@ -448,16 +456,37 @@ def run_analysis(market_filter=None):
     print(f"📈 Actions:    {', '.join(tickers)}")
     print(f"{'='*60}\n")
 
+    # Generate daily market summary
+    if successful_results:
+        _generate_and_save_market_summary(successful_results)
 
-def create_market_job(market):
-    """Crée une fonction job pour un marché spécifique"""
-    def job():
-        if is_market_day():
-            print(f"\n⏰ Déclenchement analyse {MARKET_SCHEDULES[market]['name']}")
-            run_analysis(market_filter=market)
+
+def _generate_and_save_market_summary(analyses_results):
+    """Generate and save daily market summary after all analyses complete."""
+    try:
+        print(f"\n{'='*60}")
+        print(f"📋 GENERATION DU RESUME MARCHE QUOTIDIEN")
+        print(f"{'='*60}")
+
+        summary, elapsed = generate_market_summary(analyses_results)
+
+        if summary and not summary.get('error'):
+            from database import save_news_summary
+
+            summary_data = {
+                'summary': json.dumps(summary, ensure_ascii=False),
+                'article_count': len(analyses_results),
+                'sources': [a['ticker'] for a in analyses_results],
+                'is_fallback': False
+            }
+            save_news_summary('market_daily_summary', summary_data)
+            print(f"   ✅ Resume marche sauvegarde ({elapsed:.1f}s)")
         else:
-            print(f"📅 Weekend - Pas d'analyse pour {market}")
-    return job
+            print(f"   ⚠️ Echec generation resume marche")
+    except Exception as e:
+        print(f"   ❌ Erreur resume marche: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def run_single_analysis(ticker):
@@ -508,26 +537,26 @@ def check_for_new_tickers():
     Returns list of new tickers that need immediate analysis.
     """
     global _last_known_tickers, _config_file_mtime
-    
+
     current_mtime = get_config_mtime()
     if current_mtime == _config_file_mtime and _last_known_tickers:
         return []
-    
+
     _config_file_mtime = current_mtime
     config = load_config()
     current_tickers = set(config.get('tickers', []))
-    
+
     if not _last_known_tickers:
         # First run, initialize without triggering analysis
         _last_known_tickers = current_tickers
         return []
-    
+
     new_tickers = current_tickers - _last_known_tickers
     _last_known_tickers = current_tickers
-    
+
     if new_tickers:
         print(f"\n🆕 Nouveaux tickers détectés: {', '.join(new_tickers)}")
-    
+
     return list(new_tickers)
 
 
@@ -833,6 +862,7 @@ if __name__ == "__main__":
     parser.add_argument('--portfolio', action='store_true', help='Run portfolio analysis')
     parser.add_argument('--portfolio-force', action='store_true', help='Force portfolio analysis regardless of last analysis date')
     parser.add_argument('--news', action='store_true', help='Run news summary only')
+    parser.add_argument('--force-news', action='store_true', help='Force news summary update (even if already generated today)')
     parser.add_argument('--daemon', action='store_true', help='Run as daemon with smart scheduler')
     args = parser.parse_args()
     
@@ -858,6 +888,15 @@ if __name__ == "__main__":
     if args.news:
         if NEWS_AVAILABLE:
             print("\n📰 Génération résumés news...")
+            update_news_summaries(force=False)
+        else:
+            print("⚠️ News module non disponible")
+        exit(0)
+
+    # Handle force news summary
+    if args.force_news:
+        if NEWS_AVAILABLE:
+            print("\n📰 MODE FORCÉ: Génération résumés news...")
             update_news_summaries(force=True)
         else:
             print("⚠️ News module non disponible")

@@ -160,6 +160,27 @@ export class NewsPanel extends BaseComponent {
         line-height: 1.6;
         color: var(--text-secondary);
       }
+      .summary-section {
+        margin-bottom: 14px;
+      }
+      .summary-section-title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        margin-top: 10px;
+        margin-bottom: 8px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .summary-section-content {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        line-height: 1.7;
+        margin-left: 2px;
+        white-space: pre-line;
+      }
 
       .summary-sources {
         margin-top: 10px;
@@ -241,7 +262,12 @@ export class NewsPanel extends BaseComponent {
   static CATEGORIES = {
     my_stocks: { label: 'Mes Actions', icon: '📊' },
     market: { label: 'Marché', icon: '🌍' },
-    tech: { label: 'Tech', icon: '💻' }
+    tech: { label: 'Tech', icon: '💻' },
+    defense: { label: 'Défense', icon: '🛡️' },
+    healthcare: { label: 'Santé', icon: '🩺' },
+    financial: { label: 'Finance', icon: '💰' },
+    consumer: { label: 'Consommation', icon: '🛒' },
+    semiconductor: { label: 'Semi-conducteurs', icon: '🔌' }
   };
 
   constructor() {
@@ -407,9 +433,34 @@ export class NewsPanel extends BaseComponent {
     const articleCount = data.article_count || 0;
     const isFallback = data.is_fallback || false;
 
+    // Parse summary for **section** (accepts any chars except *)
+    const summarySections = [];
+    const regex = /\*\*([^*]+)\*\*\s*([^*]+)/g;
+    let match;
+    let lastIndex = 0;
+    const text = data.summary;
+    while ((match = regex.exec(text)) !== null) {
+      summarySections.push({
+        title: match[1].trim(),
+        content: match[2].trim()
+      });
+      lastIndex = regex.lastIndex;
+    }
+    // If no matches, fallback to raw summary
+    const hasSections = summarySections.length > 0;
+
     return html`
       <div class="summary-card">
-        <div class="summary-text">${data.summary}</div>
+        <div class="summary-text">
+          ${hasSections
+            ? summarySections.map(sec => html`
+                <div class="summary-section">
+                  <div class="summary-section-title">${sec.title}</div>
+                  <div class="summary-section-content">${sec.content}</div>
+                </div>
+              `)
+            : text}
+        </div>
         ${sources || articleCount ? html`
           <div class="summary-sources">
             <span class="sources-label">${sources ? `Sources: ${sources}` : ''}</span>

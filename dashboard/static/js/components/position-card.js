@@ -572,7 +572,7 @@ export class PositionCard extends BaseComponent {
       }
 
       .ai-advice-text {
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         color: var(--text-secondary);
         line-height: 1.4;
       }

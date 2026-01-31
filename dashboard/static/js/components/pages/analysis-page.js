@@ -30,6 +30,9 @@ export class AnalysisPage extends BaseComponent {
         // Latest filters
         latestSortBy: { type: String },
         latestSignalFilter: { type: String },
+        latestSectorFilter: { type: String },
+        // Market summary
+        marketSummary: { type: Object },
         // UI state
         loading: { type: Boolean },
         loadingAnalysis: { type: Boolean },
@@ -49,7 +52,7 @@ export class AnalysisPage extends BaseComponent {
 
             /* News Panel Spacing */
             news-panel {
-                margin-bottom: 8px;
+                margin-bottom: 16px;
             }
 
             /* Analysis Container */
@@ -445,6 +448,8 @@ export class AnalysisPage extends BaseComponent {
         this.searchQuery = '';
         this.latestSortBy = 'time'; // 'time', 'ticker', 'signal', 'health'
         this.latestSignalFilter = ''; // '', 'acheter', 'vendre', 'conserver'
+        this.latestSectorFilter = ''; // '', 'Technology', etc.
+        this.marketSummary = null;
         this.loading = true;
         this.loadingAnalysis = false;
         this.historyExpanded = false;
@@ -477,8 +482,11 @@ export class AnalysisPage extends BaseComponent {
             // Extract unique tickers
             this._updateTickers();
 
-            // Load portfolio analysis separately
-            await this._loadPortfolioAnalysis();
+            // Load portfolio analysis and market summary separately
+            await Promise.all([
+                this._loadPortfolioAnalysis(),
+                this._loadMarketSummary()
+            ]);
         } catch (error) {
             console.error('Error loading analyses:', error);
         } finally {
@@ -520,6 +528,19 @@ export class AnalysisPage extends BaseComponent {
         }
     }
 
+    async _loadMarketSummary() {
+        try {
+            const response = await fetch(`${this.apiBase}/api/market/summary`);
+            const data = await response.json();
+            if (data.success && data.summary) {
+                this.marketSummary = data;
+            }
+        } catch (error) {
+            console.error('Error loading market summary:', error);
+            this.marketSummary = null;
+        }
+    }
+
     async _reloadHistory() {
         try {
             const historyData = await this._fetchHistory();
@@ -557,6 +578,11 @@ export class AnalysisPage extends BaseComponent {
 
     _handleLatestSignalFilter(e, signal) {
         this.latestSignalFilter = this.latestSignalFilter === signal ? '' : signal;
+        this.requestUpdate();
+    }
+
+    _handleLatestSectorFilter(e, sector) {
+        this.latestSectorFilter = this.latestSectorFilter === sector ? '' : sector;
         this.requestUpdate();
     }
 
@@ -647,6 +673,16 @@ export class AnalysisPage extends BaseComponent {
         return Object.entries(grouped).sort((a, b) => new Date(b[0]) - new Date(a[0]));
     }
 
+    get uniqueSectors() {
+        const sectors = new Set();
+        this.latestAnalyses.forEach(a => {
+            if (a.sector && a.sector !== 'N/A' && a.sector !== null) {
+                sectors.add(a.sector);
+            }
+        });
+        return Array.from(sectors).sort();
+    }
+
     get filteredLatest() {
         let result = [...this.latestAnalyses];
         
@@ -665,7 +701,12 @@ export class AnalysisPage extends BaseComponent {
         if (this.latestSignalFilter) {
             result = result.filter(a => this._normalizeSignal(a.signal) === this.latestSignalFilter);
         }
-        
+
+        // Filter by sector
+        if (this.latestSectorFilter) {
+            result = result.filter(a => a.sector === this.latestSectorFilter);
+        }
+
         // Sort
         switch (this.latestSortBy) {
             case 'ticker':
@@ -703,14 +744,8 @@ export class AnalysisPage extends BaseComponent {
                 api-base="${this.apiBase}"
             ></news-panel>
 
-            <!-- Portfolio AI Analysis -->
-            <div class="analysis-container">
-                <portfolio-analysis-card
-                    theme="${this.theme}"
-                    .analysis="${this.portfolioAnalysis}"
-                    ?loading="${this.loadingAnalysis}"
-                ></portfolio-analysis-card>
-            </div>
+            <!-- Market Summary -->
+            ${this._renderMarketSummary()}
 
             <!-- Latest Analyses -->
             ${this._renderLatest()}
@@ -776,7 +811,34 @@ export class AnalysisPage extends BaseComponent {
                             `)}
                         </div>
                     </div>
-                    
+
+                    <!-- Sector Filter -->
+                    ${this.uniqueSectors.length > 0 ? html`
+                        <div class="latest-filter-group">
+                            <span class="latest-filter-label">Secteur:</span>
+                            <div class="sort-buttons" style="flex-wrap: wrap;">
+                                <app-button
+                                    variant="${this.latestSectorFilter === '' ? 'primary' : 'filter'}"
+                                    label="Tous"
+                                    size="sm"
+                                    ?active="${this.latestSectorFilter === ''}"
+                                    .theme="${this.theme}"
+                                    @click="${(e) => { this.latestSectorFilter = ''; this.requestUpdate(); }}"
+                                ></app-button>
+                                ${this.uniqueSectors.map(sector => html`
+                                    <app-button
+                                        variant="${this.latestSectorFilter === sector ? 'primary' : 'filter'}"
+                                        label="${sector}"
+                                        size="sm"
+                                        ?active="${this.latestSectorFilter === sector}"
+                                        .theme="${this.theme}"
+                                        @click="${(e) => this._handleLatestSectorFilter(e, sector)}"
+                                    ></app-button>
+                                `)}
+                            </div>
+                        </div>
+                    ` : ''}
+
                     <!-- Search -->
                     <div class="search-bar">
                         <form-input
@@ -812,6 +874,117 @@ export class AnalysisPage extends BaseComponent {
                         `)}
                     </div>
                 `}
+            </div>
+        `;
+    }
+
+    _renderMarketSummary() {
+        if (!this.marketSummary || !this.marketSummary.summary) return '';
+
+        const s = this.marketSummary.summary;
+        const moodEmoji = { 'Haussier': '📈', 'Baissier': '📉', 'Mixte': '↔️', 'Neutre': '➖' };
+        const moodColor = { 'Haussier': 'var(--success)', 'Baissier': 'var(--danger)', 'Mixte': 'var(--warning, #f59e0b)', 'Neutre': 'var(--text-muted)' };
+        const mood = s.market_mood || 'Neutre';
+
+        return html`
+            <div class="latest-section" style="margin-bottom: 16px;">
+                <div class="section-header">
+                    <div class="section-title">
+                        <span class="icon">📋</span>
+                        Resume du Marche
+                    </div>
+                    <span style="
+                        font-size: 0.7rem;
+                        font-weight: 700;
+                        padding: 3px 10px;
+                        border-radius: var(--radius-full);
+                        color: ${moodColor[mood] || 'var(--text-muted)'};
+                        border: 1px solid ${moodColor[mood] || 'var(--text-muted)'};
+                        background: ${moodColor[mood] || 'var(--text-muted)'}15;
+                    ">${moodEmoji[mood] || ''} ${mood}</span>
+                </div>
+
+                <div style="
+                    background: var(--bg-secondary);
+                    border: 1px solid var(--border-color);
+                    border-radius: var(--radius-md);
+                    padding: 16px;
+                ">
+                    <p style="color: var(--text-primary); font-size: 0.85rem; margin: 0 0 12px 0; line-height: 1.6;">
+                        ${s.summary || ''}
+                    </p>
+
+                    ${(s.top_picks && s.top_picks.length > 0) ? html`
+                        <div style="margin-bottom: 8px;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: var(--success); margin-right: 6px;">
+                                A Acheter:
+                            </span>
+                            ${s.top_picks.map(p => html`
+                                <span title="${p.raison || ''}" style="
+                                    display: inline-block;
+                                    padding: 2px 8px;
+                                    margin: 2px;
+                                    background: rgba(6,214,160,0.1);
+                                    border: 1px solid var(--success);
+                                    border-radius: var(--radius-full);
+                                    font-size: 0.7rem;
+                                    font-weight: 700;
+                                    color: var(--success);
+                                    cursor: help;
+                                ">${p.ticker}</span>
+                            `)}
+                        </div>
+                    ` : ''}
+
+                    ${(s.sells && s.sells.length > 0) ? html`
+                        <div style="margin-bottom: 8px;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: var(--danger); margin-right: 6px;">
+                                A Vendre:
+                            </span>
+                            ${s.sells.map(p => html`
+                                <span title="${p.raison || ''}" style="
+                                    display: inline-block;
+                                    padding: 2px 8px;
+                                    margin: 2px;
+                                    background: rgba(255,51,102,0.1);
+                                    border: 1px solid var(--danger);
+                                    border-radius: var(--radius-full);
+                                    font-size: 0.7rem;
+                                    font-weight: 700;
+                                    color: var(--danger);
+                                    cursor: help;
+                                ">${p.ticker}</span>
+                            `)}
+                        </div>
+                    ` : ''}
+
+                    ${(s.sector_performance && s.sector_performance.length > 0) ? html`
+                        <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
+                            ${s.sector_performance.map(sp => {
+                                const tColor = sp.trend === 'Haussier' ? 'var(--success)' : sp.trend === 'Baissier' ? 'var(--danger)' : 'var(--text-muted)';
+                                return html`
+                                    <span title="${sp.comment || ''}" style="
+                                        display: inline-block;
+                                        padding: 2px 8px;
+                                        background: var(--bg-primary);
+                                        border: 1px solid var(--border-color);
+                                        border-radius: var(--radius-sm);
+                                        font-size: 0.65rem;
+                                        color: ${tColor};
+                                        cursor: help;
+                                    ">${sp.trend === 'Haussier' ? '▲' : sp.trend === 'Baissier' ? '▼' : '●'} ${sp.sector}</span>
+                                `;
+                            })}
+                        </div>
+                    ` : ''}
+
+                    ${this.marketSummary.generated_at ? html`
+                        <div style="font-size: 0.6rem; color: var(--text-muted); margin-top: 10px;">
+                            Genere le ${new Date(this.marketSummary.generated_at).toLocaleString('fr-CH')}
+                            · ${this.marketSummary.tickers_analyzed || 0} actions analysees
+                        </div>
+                    ` : ''}
+                </div>
             </div>
         `;
     }

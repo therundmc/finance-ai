@@ -130,29 +130,36 @@ export class Button extends BaseComponent {
         border-color: var(--brand-secondary);
       }
       
+
       /* Success Variant */
       .button.success {
         background: var(--success-light);
         border-color: var(--success-border);
         color: var(--success);
       }
-      
-      .button.success:hover {
-        background: rgba(6, 214, 160, 0.2);
+
+      .button.success:hover,
+      :host([active]) .button.success {
+        background: linear-gradient(135deg, var(--success) 0%, #00ff88 100%);
+        color: white;
         border-color: var(--success);
+        box-shadow: 0 4px 15px rgba(6, 214, 160, 0.18);
       }
       
+
       /* Danger Variant */
       .button.danger {
         background: var(--danger-light);
         border-color: var(--danger-border);
         color: var(--danger);
       }
-      
-      .button.danger:hover {
-        background: var(--danger);
+
+      .button.danger:hover,
+      :host([active]) .button.danger {
+        background: linear-gradient(135deg, var(--danger) 0%, #ff6b6b 100%);
         color: white;
         border-color: var(--danger);
+        box-shadow: 0 4px 15px rgba(255, 51, 102, 0.18);
       }
       
       /* Icon Only Mode - when no label */

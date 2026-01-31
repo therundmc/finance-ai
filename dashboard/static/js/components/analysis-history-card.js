@@ -241,7 +241,7 @@ export class AnalysisHistoryCard extends BaseComponent {
 
       /* === SECTION TITLE === */
       .section-title {
-        font-size: 0.7rem;
+        font-size: 0.8rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
@@ -254,7 +254,7 @@ export class AnalysisHistoryCard extends BaseComponent {
 
       /* === RÉSUMÉ === */
       .resume-text {
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         color: var(--text-secondary);
         line-height: 1.6;
       }
@@ -335,8 +335,8 @@ export class AnalysisHistoryCard extends BaseComponent {
       /* === TEXT SECTIONS === */
       .text-section {
         font-size: 0.85rem;
-        color: var(--text-secondary);
         line-height: 1.7;
+        color: var(--text-secondary);
         padding: 0;
       }
 
@@ -348,7 +348,7 @@ export class AnalysisHistoryCard extends BaseComponent {
       /* Main subsection (Tendance, Valorisation, etc.) */
       .text-section .subsection {
         display: block;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         font-weight: 800;
         color: var(--text-primary);
         margin-top: 12px;
@@ -367,11 +367,11 @@ export class AnalysisHistoryCard extends BaseComponent {
         margin: 6px 0;
         padding-left: 12px;
       }
-
+.text-section
       .text-section .indicator-name {
         font-weight: 700;
         color: var(--text-primary);
-        font-size: 0.8rem;
+        font-size: 0.9rem;
         text-transform: uppercase;
         letter-spacing: 0.3px;
       }
@@ -392,7 +392,7 @@ export class AnalysisHistoryCard extends BaseComponent {
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         font-weight: 800;
         margin-bottom: 6px;
       }
@@ -406,7 +406,7 @@ export class AnalysisHistoryCard extends BaseComponent {
       }
 
       .text-section .points-title .icon {
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         font-weight: 900;
       }
 
@@ -423,10 +423,7 @@ export class AnalysisHistoryCard extends BaseComponent {
       /* === CONCLUSION === */
       .conclusion-text {
         font-size: 0.9rem;
-        color: var(--text-secondary);
         line-height: 1.7;
-        padding: 12px;
-        background: rgba(139, 92, 246, 0.05);
         border-radius: var(--radius-sm);
       }
 

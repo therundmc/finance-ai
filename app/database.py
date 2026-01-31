@@ -42,6 +42,7 @@ class Analysis(Base):
     news_analyzed = Column(Integer, default=0)
     analysis = Column(Text)
     raw_response = Column(Text)
+    sector = Column(String(50), index=True)  # NEW: sector field
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relations
@@ -65,6 +66,7 @@ class Analysis(Base):
             'news_analyzed': self.news_analyzed,
             'analysis': self.analysis,
             'raw_response': self.raw_response,
+            'sector': self.sector,
         }
         
         # Ajouter les indicateurs si présents
@@ -471,6 +473,7 @@ def save_analysis(data: Dict[str, Any]) -> Optional[Analysis]:
             news_analyzed=data.get('news_analyzed', 0),
             analysis=data.get('analysis'),
             raw_response=data.get('raw_response'),
+            sector=data.get('sector'),
         )
         
         db.add(analysis)

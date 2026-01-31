@@ -42,50 +42,41 @@ export class StatCard extends BaseComponent {
   static styles = [
     sharedStyles,
     css`
+
       :host {
         display: block;
       }
 
+
       .stat-card {
         position: relative;
         padding: var(--spacing-sm);
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
+        background: rgba(255,255,255,0.18);
+        border-radius: 16px;
+        box-shadow: 0 4px 24px 0 rgba(31,38,135,0.18), 0 1.5px 4px 0 rgba(0,0,0,0.10);
+        border: 1px solid rgba(120,120,120,0.13);
+        backdrop-filter: blur(14px) saturate(160%);
+        -webkit-backdrop-filter: blur(14px) saturate(160%);
         text-align: center;
         overflow: hidden;
-        transition: all 0.2s ease;
+        transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
         min-height: 110px;
         height: 100%;
         display: flex;
         flex-direction: column;
         justify-content: center;
+        margin-left: 0;
+        margin-right: 0;
       }
 
       :host([theme="dark"]) .stat-card {
-        background: var(--bg-secondary);
-        border-color: var(--border-color);
+        background: rgba(31, 27, 24, 0.5);
+        /* Blend a soft white and a soft dark shadow for realism */
+        box-shadow: 0 2px 12px 0 rgba(0,0,0,0.32), 0 1.5px 8px 0 rgba(255,255,255,0.08);
       }
 
       .stat-card:hover {
-        border-color: var(--brand-secondary) !important;
-        transform: translateY(-2px);
-      }
-
-      /* Variants - P&L gradient text colors */
-      .stat-card.success .stat-value {
-        background: linear-gradient(90deg, #06d6a0, #00ff88);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        font-weight: 900;
-      }
-      .stat-card.success .currency-symbol {
-        -webkit-text-fill-color: #06d6a0;
-      }
-      .stat-card.success:hover {
-        border-color: var(--success) !important;
-        box-shadow: 0 4px 16px rgba(6, 214, 160, 0.25);
+        border: 1.5px solid var(--primary, #6c63ff);
       }
 
       .stat-card.danger .stat-value {
