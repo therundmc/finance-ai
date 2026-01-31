@@ -598,63 +598,14 @@ export class PortfolioAnalysisCard extends BaseComponent {
     return 'danger';
   }
 
-  _parsePlanStep(step) {
-    // Parse a plan step like "Vendre GCTS immediatement a 1.16$ - cassure technique, SL 0.95$, liberer 568$"
-    // or "Acheter NOC a 692$ avec SL 645$ objectif 780$ - defense premium, resultats Q4"
-
-    const parsed = {
-      action: '',
-      ticker: '',
-      price: '',
-      stopLoss: '',
-      target: '',
-      budget: '',
-      reason: ''
-    };
-
-    // Extract action verb
-    const actionMatch = step.match(/^(Vendre|Acheter|Alleger|Surveiller|Conserver|Renforcer)/i);
-    if (actionMatch) {
-      parsed.action = actionMatch[1];
-    }
-
-    // Extract ticker (usually follows action, uppercase letters 2-5 chars)
-    const tickerMatch = step.match(/(?:Vendre|Acheter|Alleger|Surveiller|Conserver|Renforcer)\s+([A-Z]{1,5})\b/i);
-    if (tickerMatch) {
-      parsed.ticker = tickerMatch[1];
-    }
-
-    // Extract price "a XXX$" or "à XXX$"
-    const priceMatch = step.match(/\b(?:a|à)\s+([\d.]+)\$/i);
-    if (priceMatch) {
-      parsed.price = priceMatch[1];
-    }
-
-    // Extract stop-loss "SL XXX$" or "stop-loss XXX$"
-    const slMatch = step.match(/(?:SL|stop-loss)\s+([\d.]+)\$/i);
-    if (slMatch) {
-      parsed.stopLoss = slMatch[1];
-    }
-
-    // Extract target/objectif "objectif XXX$" or "Obj XXX$"
-    const targetMatch = step.match(/(?:objectif|obj)\s+([\d.]+)\$/i);
-    if (targetMatch) {
-      parsed.target = targetMatch[1];
-    }
-
-    // Extract budget "budget XXX CHF"
-    const budgetMatch = step.match(/budget\s+([\d.]+)\s*CHF/i);
-    if (budgetMatch) {
-      parsed.budget = budgetMatch[1];
-    }
-
-    // Extract reason (everything after first " - ")
-    const reasonMatch = step.match(/\s-\s(.+)$/);
-    if (reasonMatch) {
-      parsed.reason = reasonMatch[1];
-    }
-
-    return parsed;
+  _getActionColor(action) {
+    const actionLower = (action || '').toLowerCase();
+    if (actionLower.includes('vendre')) return { bg: 'rgba(239,68,68,0.15)', color: 'var(--danger)' };
+    if (actionLower.includes('acheter')) return { bg: 'rgba(16,185,129,0.15)', color: 'var(--success)' };
+    if (actionLower.includes('conserver')) return { bg: 'rgba(245,158,11,0.15)', color: 'var(--warning)' };
+    if (actionLower.includes('surveiller')) return { bg: 'rgba(124,58,237,0.15)', color: 'var(--brand-secondary)' };
+    if (actionLower.includes('alleger') || actionLower.includes('renforcer')) return { bg: 'rgba(59,130,246,0.15)', color: 'var(--info,#3b82f6)' };
+    return { bg: 'var(--bg-tertiary)', color: 'var(--text-primary)' };
   }
 
   _formatText(text) {
@@ -815,38 +766,43 @@ export class PortfolioAnalysisCard extends BaseComponent {
                 <div class="section-title">Plan d'action</div>
                 <div class="plan-list">
                   ${plan_action.map((step, i) => {
-                    const parsed = this._parsePlanStep(step);
+                    // Handle both new structured format and old string format
+                    const isObject = typeof step === 'object' && step !== null;
+                    const action = isObject ? step.action : '';
+                    const tickers = isObject ? (step.tickers || []) : [];
+                    const stopLoss = isObject ? step.stop_loss : null;
+                    const takeProfit = isObject ? step.take_profit : null;
+                    const nombreActions = isObject ? step.nombre_actions : null;
+                    const raison = isObject ? step.raison : step;
+
+                    const colors = this._getActionColor(action);
+
                     return html`
                       <div class="plan-step">
                         <span class="plan-num">${i + 1}</span>
                         <div class="plan-content">
                           <div class="plan-main">
-                            <span class="plan-action-type" style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:800;background:
-                              ${parsed.action && parsed.action.toLowerCase().includes('vendre') ? 'rgba(239,68,68,0.15)' :
-                                parsed.action && parsed.action.toLowerCase().includes('conserver') ? 'rgba(245,158,11,0.15)' :
-                                parsed.action && parsed.action.toLowerCase().includes('surveiller') ? 'rgba(124,58,237,0.15)' :
-                                parsed.action && parsed.action.toLowerCase().includes('acheter') ? 'rgba(16,185,129,0.15)' :
-                                parsed.action && parsed.action.toLowerCase().includes('alleger') ? 'rgba(59,130,246,0.15)' :
-                                'var(--bg-tertiary)'};
-                              color:
-                              ${parsed.action && parsed.action.toLowerCase().includes('vendre') ? 'var(--danger)' :
-                                parsed.action && parsed.action.toLowerCase().includes('conserver') ? 'var(--warning)' :
-                                parsed.action && parsed.action.toLowerCase().includes('surveiller') ? 'var(--brand-secondary)' :
-                                parsed.action && parsed.action.toLowerCase().includes('acheter') ? 'var(--success)' :
-                                parsed.action && parsed.action.toLowerCase().includes('alleger') ? 'var(--info,#3b82f6)' :
-                                'var(--text-primary)'};
-                            ">${parsed.action}</span>
-                            ${parsed.ticker ? html`<span class="plan-ticker">${parsed.ticker}</span>` : ''}
+                            ${isObject ? html`
+                              <span class="plan-action-type" style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:800;background:${colors.bg};color:${colors.color};">
+                                ${action}
+                              </span>
+                              ${tickers.length ? html`
+                                <span class="plan-ticker">${tickers.join(', ')}</span>
+                              ` : ''}
+                            ` : html`
+                              <span style="font-size:0.8rem;color:var(--text-secondary);">${step}</span>
+                            `}
                           </div>
-                          ${(parsed.price || parsed.stopLoss || parsed.target || parsed.budget) ? html`
+                          ${isObject && (stopLoss || takeProfit || nombreActions) ? html`
                             <div class="plan-details">
-                              ${parsed.price ? html`<span class="plan-detail-item"><span class="plan-detail-label">Prix:</span> ${parsed.price}$</span>` : ''}
-                              ${parsed.stopLoss ? html`<span class="plan-detail-item"><span class="plan-detail-label">SL:</span> ${parsed.stopLoss}$</span>` : ''}
-                              ${parsed.target ? html`<span class="plan-detail-item"><span class="plan-detail-label">TP:</span> ${parsed.target}$</span>` : ''}
-                              ${parsed.budget ? html`<span class="plan-detail-item"><span class="plan-detail-label">Budget:</span> ${parsed.budget} CHF</span>` : ''}
+                              ${nombreActions ? html`<span class="plan-detail-item"><span class="plan-detail-label">Qté:</span> ${nombreActions}x</span>` : ''}
+                              ${stopLoss ? html`<span class="plan-detail-item"><span class="plan-detail-label">SL:</span> ${stopLoss.toFixed(2)}$</span>` : ''}
+                              ${takeProfit ? html`<span class="plan-detail-item"><span class="plan-detail-label">TP:</span> ${takeProfit.toFixed(2)}$</span>` : ''}
                             </div>
                           ` : ''}
-                          <div class="plan-step-raw" style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">${step}</div>
+                          ${isObject && raison ? html`
+                            <div class="plan-reason">${raison}</div>
+                          ` : ''}
                         </div>
                       </div>
                     `;

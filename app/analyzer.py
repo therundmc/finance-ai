@@ -462,10 +462,10 @@ def run_analysis(market_filter=None):
 
 
 def _generate_and_save_market_summary(analyses_results):
-    """Generate and save daily market summary after all analyses complete."""
+    """Generate and save sector trends after all analyses complete."""
     try:
         print(f"\n{'='*60}")
-        print(f"📋 GENERATION DU RESUME MARCHE QUOTIDIEN")
+        print(f"📋 GENERATION DES TENDANCES SECTORIELLES")
         print(f"{'='*60}")
 
         summary, elapsed = generate_market_summary(analyses_results)
@@ -479,12 +479,12 @@ def _generate_and_save_market_summary(analyses_results):
                 'sources': [a['ticker'] for a in analyses_results],
                 'is_fallback': False
             }
-            save_news_summary('market_daily_summary', summary_data)
-            print(f"   ✅ Resume marche sauvegarde ({elapsed:.1f}s)")
+            save_news_summary('sector_trends', summary_data)
+            print(f"   ✅ Tendances sectorielles sauvegardees ({elapsed:.1f}s)")
         else:
-            print(f"   ⚠️ Echec generation resume marche")
+            print(f"   ⚠️ Echec generation tendances sectorielles")
     except Exception as e:
-        print(f"   ❌ Erreur resume marche: {e}")
+        print(f"   ❌ Erreur tendances sectorielles: {e}")
         import traceback
         traceback.print_exc()
 

@@ -557,13 +557,30 @@ Reponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou apres, sans ba
     "resume": "2-3 phrases courtes sur l'etat actuel du portefeuille, performance globale, et orientation strategique recommandee."
   }},
   "plan_action": [
-    "Vendre GCTS immediatement a 1.16$ - stop-loss proche, liberer 580$",
-    "Alleger MU de 50% a 101$ - prendre profits +1.15%, liberer 415$",
-    "Acheter NOC 5 actions a 692$ avec SL 645$ objectif 780$ - defense premium",
-    "Acheter ENOV 100 actions a 22$ avec SL 19.5$ objectif 48.50$ - rebond healthcare",
-    "Acheter MA 4 actions a 538$ avec SL 505$ objectif 620$ - paiements survendu",
-    "Surveiller TTWO - couper si cassure 210$, sinon conserver pour rebond >225$",
-    "Conserver LMT, NVDA, GOOG - momentum intact, ne pas renforcer"
+    {{
+      "action": "VENDRE",
+      "tickers": ["GCTS"],
+      "stop_loss": 0.95,
+      "take_profit": null,
+      "nombre_actions": null,
+      "raison": "Stop-loss proche, liberer du capital"
+    }},
+    {{
+      "action": "ACHETER",
+      "tickers": ["NOC"],
+      "stop_loss": 645.00,
+      "take_profit": 780.00,
+      "nombre_actions": 5,
+      "raison": "Defense premium, momentum haussier"
+    }},
+    {{
+      "action": "CONSERVER",
+      "tickers": ["LMT", "NVDA", "GOOG"],
+      "stop_loss": null,
+      "take_profit": null,
+      "nombre_actions": null,
+      "raison": "Momentum intact, positions solides"
+    }}
   ],
   "achats_recommandes": [
     {{
@@ -610,7 +627,14 @@ Reponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou apres, sans ba
 REGLES CRITIQUES:
 - Retourne UNIQUEMENT le JSON valide et COMPLET
 - resume_global.resume: 2-3 phrases courtes sur l'etat du portefeuille, performance globale, et orientation strategique. OBLIGATOIRE.
-- plan_action: 3-7 etapes CONCRETES et dans l'ORDRE DE PRIORITE. Chaque etape commence par un verbe d'action (Vendre, Acheter, Alleger, Surveiller, Conserver). Pour les achats, TOUJOURS indiquer le NOMBRE D'ACTIONS (ex: "Acheter NOC 5 actions a 692$"). Inclure ticker, prix et raison courte. C'est la PARTIE LA PLUS IMPORTANT - l'investisseur suivra ces etapes dans l'ordre.
+- plan_action: 3-7 etapes CONCRETES en objets structures, dans l'ORDRE DE PRIORITE. C'est la PARTIE LA PLUS IMPORTANTE - l'investisseur suivra ces etapes dans l'ordre.
+  * Chaque objet doit contenir:
+    - action: "VENDRE" | "ACHETER" | "ALLEGER" | "SURVEILLER" | "CONSERVER" | "RENFORCER"
+    - tickers: array de tickers concernes (ex: ["AAPL"] ou ["NVDA", "GOOG"])
+    - stop_loss: prix du stop-loss (ou null si non applicable)
+    - take_profit: prix de l'objectif (ou null si non applicable)
+    - nombre_actions: nombre d'actions pour ACHETER/VENDRE (ou null si non applicable)
+    - raison: phrase courte expliquant pourquoi (max 15 mots)
 - achats_recommandes: SEULEMENT des achats haute conviction, budget total <= {budget} {budget_currency}. Pour chaque achat, calculer le NOMBRE D'ACTIONS recommande (nombre_actions) base sur le budget disponible et le prix d'entree.
 - ventes_recommandees: positions a liquider ou alleger avec urgence et raison
 - Chaque achat DOIT avoir un stop_loss (proteger le capital)
@@ -700,7 +724,7 @@ Tu es direct et actionnable. Pas de disclaimers ou de langage vague."""
 
 def build_market_summary_prompt(analyses_results):
     """
-    Build prompt for daily market summary from completed analyses.
+    Build simplified prompt for sector trends summary.
 
     Args:
         analyses_results: List of analysis result dicts from analyze_stock()
@@ -716,27 +740,20 @@ def build_market_summary_prompt(analyses_results):
             by_sector[sector] = []
         by_sector[sector].append(a)
 
-    prompt = f"""# RESUME QUOTIDIEN DU MARCHE - {datetime.now().strftime('%Y-%m-%d')}
+    prompt = f"""# TENDANCES SECTORIELLES - {datetime.now().strftime('%Y-%m-%d')}
 
 ## INSTRUCTIONS
-Tu es un stratege de marche senior. A partir des analyses ci-dessous, genere un resume quotidien synthetique:
-1. Quelles actions sont les plus attractives a acheter aujourd'hui et pourquoi
-2. Quelles actions devraient etre vendues et pourquoi
-3. Quels secteurs performent le mieux / le moins bien
-4. Vue d'ensemble du marche
+Analyse les tendances par secteur. Pour chaque secteur, determine simplement la tendance globale.
 
-## ANALYSES DU JOUR ({len(analyses_results)} actions)
+## ANALYSES PAR SECTEUR
 """
 
     for sector, analyses in by_sector.items():
-        prompt += f"\n### Secteur: {sector}\n"
+        prompt += f"\n### {sector}\n"
         for a in analyses:
             signal = a.get('signal', 'N/A')
-            confidence = a.get('confidence', 'N/A')
             change_1d = a.get('change_1d', 0) or 0
-            price = a.get('price', 0) or 0
-            summary = (a.get('summary', '') or '')[:150]
-            prompt += f"- **{a['ticker']}**: {signal} ({confidence}) | Prix: {price:.2f} | Var 1j: {change_1d:+.2f}% | {summary}\n"
+            prompt += f"- {a['ticker']}: {signal} | Var 1j: {change_1d:+.2f}%\n"
 
     prompt += """
 ---
@@ -747,26 +764,22 @@ Reponds UNIQUEMENT avec un objet JSON valide:
 
 {
   "date": "YYYY-MM-DD",
-  "market_mood": "Haussier | Baissier | Mixte | Neutre",
-  "summary": "3-4 phrases resumant la journee de marche",
-  "top_picks": [
-    {"ticker": "AAPL", "action": "ACHETER", "raison": "Pourquoi cette action est attractive"}
-  ],
-  "sells": [
-    {"ticker": "XYZ", "action": "VENDRE", "raison": "Pourquoi vendre"}
-  ],
-  "sector_performance": [
-    {"sector": "Technology", "trend": "Haussier", "comment": "Bref commentaire"}
-  ],
-  "key_levels": "Niveaux importants a surveiller"
+  "sector_trends": [
+    {"sector": "Technology", "trend": "Haussier | Baissier | Neutre"}
+  ]
 }
+
+REGLES:
+- trend doit etre exactement "Haussier", "Baissier" ou "Neutre"
+- Base ta decision sur les signaux et variations des actions du secteur
+- Pas de texte supplementaire, juste le JSON
 """
     return prompt
 
 
 def generate_market_summary(analyses_results):
     """
-    Generate daily market summary using Claude.
+    Generate simplified sector trends summary using Claude.
 
     Args:
         analyses_results: List of successful analysis result dicts
@@ -779,24 +792,24 @@ def generate_market_summary(analyses_results):
     if not analyses_results:
         return None, 0
 
-    print(f"📋 Generation du resume marche ({len(analyses_results)} analyses)...")
+    print(f"📋 Generation des tendances sectorielles ({len(analyses_results)} analyses)...")
 
     prompt = build_market_summary_prompt(analyses_results)
 
     portfolio_config = CLAUDE_CONFIG.get('portfolio', CLAUDE_CONFIG.get('deep_analysis'))
 
-    system_prompt = """Tu es un stratege de marche senior.
-Tu resumes les analyses du jour et identifies les meilleures opportunites.
+    system_prompt = """Tu es un analyste de marche.
+Tu determines les tendances sectorielles (Haussier/Baissier/Neutre) basees sur les signaux.
 Tu reponds UNIQUEMENT en JSON valide, sans texte avant ou apres, sans balises markdown."""
 
     try:
         response, elapsed = call_claude_api(
             prompt=prompt,
             model=portfolio_config['model'],
-            max_tokens=portfolio_config.get('max_tokens', 2048),
-            temperature=0.3,
+            max_tokens=512,  # Reduced since we only need sector trends
+            temperature=0.2,
             system_prompt=system_prompt,
-            timeout=90
+            timeout=60
         )
 
         # Clean markdown wrappers
@@ -811,11 +824,11 @@ Tu reponds UNIQUEMENT en JSON valide, sans texte avant ou apres, sans balises ma
 
         try:
             summary_json = json.loads(clean)
-            print(f"✅ Resume marche genere ({elapsed:.1f}s)")
+            print(f"✅ Tendances sectorielles generees ({elapsed:.1f}s)")
             return summary_json, elapsed
         except json.JSONDecodeError as e:
-            print(f"⚠️ Erreur JSON resume marche: {e}")
+            print(f"⚠️ Erreur JSON tendances sectorielles: {e}")
             return {'raw_response': response, 'error': 'JSON parse failed'}, elapsed
     except Exception as e:
-        print(f"❌ Erreur generation resume marche: {e}")
+        print(f"❌ Erreur generation tendances sectorielles: {e}")
         return None, 0

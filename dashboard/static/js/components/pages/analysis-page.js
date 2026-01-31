@@ -870,6 +870,45 @@ export class AnalysisPage extends BaseComponent {
         return Array.from(sectors).sort();
     }
 
+    _getSectorTrend(sector) {
+        // Get trend for a sector from market summary (sector_trends format)
+        if (!this.marketSummary || !this.marketSummary.summary) return null;
+
+        const summary = this.marketSummary.summary;
+
+        // New format: sector_trends array
+        if (summary.sector_trends && Array.isArray(summary.sector_trends)) {
+            const sectorData = summary.sector_trends.find(s => s.sector === sector);
+            if (sectorData) {
+                return sectorData.trend; // "Haussier", "Baissier", "Neutre"
+            }
+        }
+
+        // Legacy format: sector_performance array (for backwards compatibility)
+        if (summary.sector_performance && Array.isArray(summary.sector_performance)) {
+            const sectorData = summary.sector_performance.find(s => s.sector === sector);
+            if (sectorData) {
+                return sectorData.trend;
+            }
+        }
+
+        return null;
+    }
+
+    _getTrendIcon(trend) {
+        if (trend === 'Haussier') return '▲';
+        if (trend === 'Baissier') return '▼';
+        if (trend === 'Neutre') return '●';
+        return '';
+    }
+
+    _getTrendColor(trend) {
+        if (trend === 'Haussier') return 'var(--success)';
+        if (trend === 'Baissier') return 'var(--danger)';
+        if (trend === 'Neutre') return 'var(--text-muted)';
+        return 'var(--text-secondary)';
+    }
+
     get filteredLatest() {
         let result = [...this.latestAnalyses];
         
@@ -1008,12 +1047,20 @@ export class AnalysisPage extends BaseComponent {
                                     class="latest-filter-btn ${this.latestSectorFilter === '' ? 'active' : ''}"
                                     @click="${(e) => { e.stopPropagation(); this.latestSectorFilter = ''; this.requestUpdate(); }}"
                                 >Tous</button>
-                                ${this.uniqueSectors.map(sector => html`
-                                    <button
-                                        class="latest-filter-btn ${this.latestSectorFilter === sector ? 'active' : ''}"
-                                        @click="${(e) => { e.stopPropagation(); this._handleLatestSectorFilter(e, sector); }}"
-                                    >${sector}</button>
-                                `)}
+                                ${this.uniqueSectors.map(sector => {
+                                    const trend = this._getSectorTrend(sector);
+                                    const icon = trend ? this._getTrendIcon(trend) : '';
+                                    const color = trend ? this._getTrendColor(trend) : '';
+                                    return html`
+                                        <button
+                                            class="latest-filter-btn ${this.latestSectorFilter === sector ? 'active' : ''}"
+                                            @click="${(e) => { e.stopPropagation(); this._handleLatestSectorFilter(e, sector); }}"
+                                        >
+                                            ${icon ? html`<span style="color: ${color}; margin-right: 4px;">${icon}</span>` : ''}
+                                            ${sector}
+                                        </button>
+                                    `;
+                                })}
                             </div>
                         </div>
                     ` : ''}
@@ -1087,70 +1134,8 @@ export class AnalysisPage extends BaseComponent {
     }
 
     _renderMarketSummary() {
-        if (!this.marketSummary || !this.marketSummary.summary) return '';
-
-        const s = this.marketSummary.summary;
-        const moodEmoji = { 'Haussier': '📈', 'Baissier': '📉', 'Mixte': '↔️', 'Neutre': '➖' };
-        const moodColor = { 'Haussier': 'var(--success)', 'Baissier': 'var(--danger)', 'Mixte': 'var(--warning, #f59e0b)', 'Neutre': 'var(--text-muted)' };
-        const mood = s.market_mood || 'Neutre';
-
-        return html`
-            <div class="market-panel ${this.marketSummaryExpanded ? 'expanded' : ''}">
-                <div class="market-panel-header" @click="${this._toggleMarketSummary}">
-                    <div class="market-header-left">
-                        <span class="market-panel-title">📋 Résumé du Marché</span>
-                        <span style="
-                            font-size: 0.65rem;
-                            font-weight: 700;
-                            padding: 2px 8px;
-                            border-radius: var(--radius-full);
-                            color: ${moodColor[mood] || 'var(--text-muted)'};
-                            border: 1px solid ${moodColor[mood] || 'var(--text-muted)'};
-                        ">${moodEmoji[mood] || ''} ${mood}</span>
-                    </div>
-                    <span class="market-toggle-icon">›</span>
-                </div>
-                <div class="market-panel-content">
-                    <div class="market-content-inner">
-                        ${(s.top_picks && s.top_picks.length > 0) ? html`
-                            <div class="market-badges-row">
-                                <span class="market-badges-label" style="color: var(--success);">Acheter:</span>
-                                ${s.top_picks.map(p => html`
-                                    <span class="market-badge buy" title="${p.raison || ''}">${p.ticker}</span>
-                                `)}
-                            </div>
-                        ` : ''}
-
-                        ${(s.sells && s.sells.length > 0) ? html`
-                            <div class="market-badges-row">
-                                <span class="market-badges-label" style="color: var(--danger);">Vendre:</span>
-                                ${s.sells.map(p => html`
-                                    <span class="market-badge sell" title="${p.raison || ''}">${p.ticker}</span>
-                                `)}
-                            </div>
-                        ` : ''}
-
-                        ${(s.sector_performance && s.sector_performance.length > 0) ? html`
-                            <div class="market-badges-row">
-                                ${s.sector_performance.map(sp => {
-                                    const tColor = sp.trend === 'Haussier' ? 'var(--success)' : sp.trend === 'Baissier' ? 'var(--danger)' : 'var(--text-muted)';
-                                    return html`
-                                        <span class="market-badge sector" style="color: ${tColor};" title="${sp.comment || ''}">${sp.trend === 'Haussier' ? '▲' : sp.trend === 'Baissier' ? '▼' : '●'} ${sp.sector}</span>
-                                    `;
-                                })}
-                            </div>
-                        ` : ''}
-
-                        ${this.marketSummary.generated_at ? html`
-                            <div class="market-meta">
-                                ${new Date(this.marketSummary.generated_at).toLocaleString('fr-CH')}
-                                · ${this.marketSummary.tickers_analyzed || 0} actions
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-        `;
+        // Market summary panel is removed - sector trends are now shown in the sector filter buttons
+        return '';
     }
 
     _renderHistory() {
