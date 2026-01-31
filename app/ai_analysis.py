@@ -466,6 +466,42 @@ def build_portfolio_analysis_prompt(positions, all_analyses, news_summaries=None
     # Owned tickers
     owned_tickers = set(p.get('ticker', '') for p in positions) if positions else set()
 
+    # NOUVEAU: Calculer la répartition sectorielle + MOMENTUM
+    sector_allocation = {}
+    for pos in positions:
+        ticker = pos.get('ticker', '')
+        analysis = all_analyses.get(ticker, {})
+        sector = analysis.get('sector', 'Unknown')
+        position_value = pos.get('current_price', pos.get('entry_price', 0)) * pos.get('quantity', 1)
+
+        if sector not in sector_allocation:
+            sector_allocation[sector] = {
+                'value': 0,
+                'tickers': [],
+                'changes_1mo': [],
+                'signals': []
+            }
+        sector_allocation[sector]['value'] += position_value
+        sector_allocation[sector]['tickers'].append(ticker)
+        sector_allocation[sector]['changes_1mo'].append(analysis.get('change_1mo', 0) or 0)
+        sector_allocation[sector]['signals'].append(analysis.get('signal', ''))
+
+    # Calculer les pourcentages et momentum
+    for sector in sector_allocation:
+        pct = (sector_allocation[sector]['value'] / total_value * 100) if total_value > 0 else 0
+        sector_allocation[sector]['pct'] = pct
+
+        # Momentum sectoriel
+        changes = sector_allocation[sector]['changes_1mo']
+        avg_change = sum(changes) / len(changes) if changes else 0
+        sector_allocation[sector]['momentum_1mo'] = avg_change
+
+        # Signaux positifs
+        signals = sector_allocation[sector]['signals']
+        bullish = sum(1 for s in signals if 'ACHETER' in str(s).upper())
+        sector_allocation[sector]['bullish_count'] = bullish
+        sector_allocation[sector]['bullish_pct'] = (bullish / len(signals) * 100) if signals else 0
+
     prompt = f"""# CONSEILLER FINANCIER PERSONNEL - ANALYSE QUOTIDIENNE
 Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
@@ -484,7 +520,52 @@ Maximise la probabilite de rendement positif. Recommande uniquement des achats a
 - **Capital investi:** {total_invested:,.2f}$
 - **Valeur actuelle:** {total_value:,.2f}$
 - **P&L Total:** {total_pnl:+,.2f}$ ({total_pnl_percent:+.2f}%)
+
+### ALLOCATION SECTORIELLE (CRITIQUE pour diversification)
 """
+
+    # Ajouter allocation sectorielle + MOMENTUM au prompt
+    if sector_allocation:
+        sectors_sorted = sorted(sector_allocation.items(), key=lambda x: x[1]['pct'], reverse=True)
+        for sector, data in sectors_sorted:
+            tickers_str = ', '.join(data['tickers'])
+            momentum = data['momentum_1mo']
+            bullish_pct = data['bullish_pct']
+
+            # Emoji momentum
+            momentum_emoji = '🔥' if momentum > 10 else '📈' if momentum > 5 else '📊' if momentum > 0 else '📉' if momentum > -5 else '❄️'
+
+            prompt += f"- **{sector}**: {data['pct']:.1f}% ({tickers_str})\n"
+            prompt += f"  Momentum 1mo: {momentum:+.1f}% | Signaux bullish: {data['bullish_count']}/{len(data['tickers'])} {momentum_emoji}\n"
+
+        prompt += "\n### ANALYSE RISQUE/OPPORTUNITE PAR SECTEUR\n"
+        for sector, data in sectors_sorted:
+            pct = data['pct']
+            momentum = data['momentum_1mo']
+            bullish_pct = data['bullish_pct']
+
+            # Déterminer le statut
+            if pct > 60:
+                if momentum > 10 and bullish_pct > 50:
+                    status = f"⚠️ TRES CONCENTRE ({pct:.0f}%) MAIS momentum fort → Conserver, ne pas renforcer"
+                else:
+                    status = f"🚨 SURCONCENTRATION CRITIQUE ({pct:.0f}%) → PRIORITE: Diversifier"
+            elif pct > 40:
+                if momentum > 8 and bullish_pct > 50:
+                    status = f"✅ Concentration élevée ({pct:.0f}%) avec momentum fort → OK pour petits renforts"
+                else:
+                    status = f"⚠️ Concentration notable ({pct:.0f}%) → Prudence sur nouveaux achats"
+            elif pct < 15:
+                if momentum > 5 or bullish_pct > 50:
+                    status = f"🎯 OPPORTUNITE ({pct:.0f}%) sous-représenté avec potentiel → Considérer renforcement"
+                else:
+                    status = f"📊 Sous-représenté ({pct:.0f}%) → Evaluer opportunités"
+            else:
+                status = f"✅ Allocation équilibrée ({pct:.0f}%)"
+
+            prompt += f"- **{sector}**: {status}\n"
+
+    prompt += "\n"
 
     if positions:
         prompt += "\n### Positions detaillees\n"
@@ -643,6 +724,38 @@ REGLES CRITIQUES:
 - projections: % attendus si on suit tes recommandations (1 semaine, 1 mois, 1 an)
 - Priorise le momentum recent et les catalyseurs news
 - Sois DIRECT et CONCIS - pas de disclaimers, pas de langage vague
+
+REGLES DE DIVERSIFICATION INTELLIGENTES (basées sur PERFORMANCE + MOMENTUM):
+
+PHILOSOPHIE: Momentum + Performance > Allocation brute
+- Secteur performant avec momentum fort = OK pour concentration moderee
+- Secteur faible meme sous-represente = Ne pas renforcer par principe
+
+NIVEAUX DE RISQUE:
+
+🟢 NIVEAU 1 - Secteur <40%:
+- AUTORISE: Renforcer si momentum >+8% (1mo) ET signaux bullish >50%
+- Exemple: Tech 35% avec +15% momentum → ✅ OK pour acheter
+- Limite: Ne pas depasser 50% meme si momentum excellent
+
+🟡 NIVEAU 2 - Secteur 40-60%:
+- PRUDENCE: Renforcer SEULEMENT si momentum TRES fort (>+12%) ET tous signaux bullish
+- RECOMMANDE: Prises de profits partielles sur positions tres gagnantes
+- ALTERNATIVE: Proposer des secteurs sous-représentés avec bon momentum
+
+🔴 NIVEAU 3 - Secteur >60%:
+- ALERTE: Recommander diversification SAUF si bull run exceptionnel (>+20% momentum)
+- DANS TOUS LES CAS: Stop-loss serres + ne pas renforcer
+- Si momentum faiblit (<+5%): VENDRE ou ALLEGER prioritaire
+
+OPPORTUNITES:
+- Secteurs <15% avec momentum >+5% = CIBLES PRIORITAIRES pour diversifier
+- Chercher des secteurs sous-representes avec signaux ACHETER
+
+COHERENCE OBLIGATOIRE:
+- Si tu recommandes "diversifier" → achats dans secteurs DIFFERENTS (<30% allocation)
+- Si secteur >50% → TOUJOURS mentionner le risque de concentration
+- Justifie CHAQUE achat par le momentum sectoriel, pas juste par le ticker
 """
 
     return prompt
@@ -675,24 +788,44 @@ def generate_portfolio_analysis(positions, all_analyses, news_summaries=None, co
 
     system_prompt = """Tu es un conseiller financier expert avec 20 ans d'experience en gestion de portefeuille.
 
-L'investisseur suivra tes recommandations directement. Ta priorite absolue: maximiser la probabilite de rendement positif.
+L'investisseur suivra tes recommandations directement. Ta priorite: MAXIMISER LE RENDEMENT tout en gerant le risque.
 
-Tu utilises:
-- Analyse technique (RSI, MACD, supports/resistances, volumes, Bollinger Bands)
-- Signaux fondamentaux (valorisation, croissance, momentum sectoriel)
-- Sentiment des news et catalyseurs recents
-- Gestion du risque (stop-loss obligatoire, diversification sectorielle)
+METHODOLOGIE D'ANALYSE (dans cet ordre):
+1. Analyser l'allocation sectorielle + MOMENTUM de chaque secteur
+2. Identifier les secteurs FORTS (momentum >+8%, signaux bullish) vs FAIBLES
+3. Evaluer risque de concentration vs opportunite de momentum
+4. Prioriser: Secteurs performants sous-representes (<30%) = MEILLEURE OPPORTUNITE
+5. COHERENCE: Si tu dis "diversifier", achete dans secteurs DIFFERENTS et performants
+
+PHILOSOPHIE GAGNANTE:
+- Momentum + Performance > Diversification aveugle
+- OK pour concentration jusqu'a 50% dans secteur TRES fort (momentum >+12%)
+- Mais si secteur >60% → TOUJOURS recommander prudence meme si forte performance
+- Secteurs faibles: ALLEGER meme si <30% allocation
+
+Tu utilises (par priorité):
+1. Momentum sectoriel (variation 1 mois, signaux bullish)
+2. Analyse technique (RSI, MACD, supports/resistances, volumes)
+3. Catalyseurs news et fondamentaux
+4. Gestion du risque adaptative (stop-loss serres si concentration >50%)
+
+REGLES ABSOLUES:
+- Temperature mentale = 0 (decisions reproductibles basees sur donnees)
+- COHERENCE totale: allocation + momentum → recommendations alignees
+- Justifie CHAQUE achat par momentum sectoriel + signal ticker
+- Si secteur >60%: TOUJOURS mentionner risque concentration
+- Stop-loss OBLIGATOIRE sur tous achats
 
 Tu reponds UNIQUEMENT en JSON valide, sans texte avant ou apres, sans balises markdown.
-Tu recommandes uniquement des achats a haute conviction avec un ratio risque/rendement favorable.
-Tu es direct et actionnable. Pas de disclaimers ou de langage vague."""
+Tu es OPPORTUNISTE (profiter momentum fort) mais PRUDENT (limiter risque concentration).
+Direct, methodique, base sur donnees. Pas de disclaimers vagues."""
 
     try:
         response, elapsed = call_claude_api(
             prompt=prompt,
             model=portfolio_config['model'],
             max_tokens=portfolio_config['max_tokens'],
-            temperature=portfolio_config.get('temperature', 0.3),
+            temperature=0.1,  # Très bas pour cohérence et répétabilité
             system_prompt=system_prompt,
             timeout=120
         )
