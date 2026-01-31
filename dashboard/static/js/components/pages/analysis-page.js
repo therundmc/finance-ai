@@ -33,6 +33,7 @@ export class AnalysisPage extends BaseComponent {
         latestSectorFilter: { type: String },
         // Market summary
         marketSummary: { type: Object },
+        marketSummaryExpanded: { type: Boolean },
         // UI state
         loading: { type: Boolean },
         loadingAnalysis: { type: Boolean },
@@ -420,6 +421,161 @@ export class AnalysisPage extends BaseComponent {
                 height: 100px;
             }
 
+            /* Market Summary Panel */
+            .market-panel {
+                background: var(--bg-secondary);
+                border: 2px solid var(--border-color);
+                border-radius: var(--radius-md);
+                overflow: hidden;
+                margin-bottom: 16px;
+                transition: all 0.25s ease;
+            }
+
+            .market-panel-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 12px 14px;
+                cursor: pointer;
+                user-select: none;
+            }
+
+            .market-panel-header:hover {
+                background: var(--bg-tertiary);
+            }
+
+            .market-header-left {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .market-panel-title {
+                font-size: 0.9rem;
+                font-weight: 800;
+                color: var(--text-primary);
+            }
+
+            .market-toggle-icon {
+                font-size: 1.2rem;
+                color: var(--text-muted);
+                transition: transform 0.3s ease;
+            }
+
+            .market-panel.expanded .market-toggle-icon {
+                transform: rotate(90deg);
+                color: var(--brand-secondary);
+            }
+
+            .market-panel-content {
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.35s ease;
+            }
+
+            .market-panel.expanded .market-panel-content {
+                max-height: 500px;
+            }
+
+            .market-content-inner {
+                padding: 0 14px 14px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .market-badges-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+                align-items: center;
+            }
+
+            .market-badges-label {
+                font-size: 0.7rem;
+                font-weight: 700;
+                margin-right: 4px;
+            }
+
+            .market-badge {
+                display: inline-block;
+                padding: 2px 8px;
+                margin: 2px;
+                border-radius: var(--radius-full);
+                font-size: 0.7rem;
+                font-weight: 700;
+                cursor: help;
+            }
+
+            .market-badge.buy {
+                background: rgba(6,214,160,0.1);
+                border: 1px solid var(--success);
+                color: var(--success);
+            }
+
+            .market-badge.sell {
+                background: rgba(255,51,102,0.1);
+                border: 1px solid var(--danger);
+                color: var(--danger);
+            }
+
+            .market-badge.sector {
+                background: var(--bg-primary);
+                border: 1px solid var(--border-color);
+                font-size: 0.65rem;
+            }
+
+            .market-meta {
+                font-size: 0.6rem;
+                color: var(--text-muted);
+            }
+
+            /* Favorites separator */
+            .favorites-separator {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin: 12px 0 8px 0;
+                color: var(--text-muted);
+                font-size: 0.7rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .favorites-separator::after {
+                content: '';
+                flex: 1;
+                height: 1px;
+                background: var(--border-color);
+            }
+
+            /* Favorite button on card */
+            .fav-btn {
+                width: 28px;
+                height: 28px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: transparent;
+                border: none;
+                cursor: pointer;
+                font-size: 1rem;
+                opacity: 0.4;
+                transition: all 0.2s ease;
+                padding: 0;
+                flex-shrink: 0;
+            }
+
+            .fav-btn:hover {
+                opacity: 1;
+                transform: scale(1.2);
+            }
+
+            .fav-btn.active {
+                opacity: 1;
+            }
+
             /* Responsive */
             @media (max-width: 640px) {
                 .filters-bar {
@@ -450,6 +606,7 @@ export class AnalysisPage extends BaseComponent {
         this.latestSignalFilter = ''; // '', 'acheter', 'vendre', 'conserver'
         this.latestSectorFilter = ''; // '', 'Technology', etc.
         this.marketSummary = null;
+        this.marketSummaryExpanded = false;
         this.loading = true;
         this.loadingAnalysis = false;
         this.historyExpanded = false;
@@ -584,6 +741,36 @@ export class AnalysisPage extends BaseComponent {
     _handleLatestSectorFilter(e, sector) {
         this.latestSectorFilter = this.latestSectorFilter === sector ? '' : sector;
         this.requestUpdate();
+    }
+
+    _toggleMarketSummary() {
+        this.marketSummaryExpanded = !this.marketSummaryExpanded;
+    }
+
+    _isFavorite(ticker) {
+        return this.favorites.includes(ticker);
+    }
+
+    async _toggleFavorite(e, ticker) {
+        e.stopPropagation();
+        e.preventDefault();
+        const isFav = this._isFavorite(ticker);
+        try {
+            const response = await fetch(`${this.apiBase}/api/favorites/${ticker}`, {
+                method: isFav ? 'DELETE' : 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+                if (isFav) {
+                    this.favorites = this.favorites.filter(t => t !== ticker);
+                } else {
+                    this.favorites = [...this.favorites, ticker];
+                }
+                this.requestUpdate();
+            }
+        } catch (error) {
+            console.error('Error toggling favorite:', error);
+        }
     }
 
     _handleSearch(e) {
@@ -817,23 +1004,15 @@ export class AnalysisPage extends BaseComponent {
                         <div class="latest-filter-group">
                             <span class="latest-filter-label">Secteur:</span>
                             <div class="sort-buttons" style="flex-wrap: wrap;">
-                                <app-button
-                                    variant="${this.latestSectorFilter === '' ? 'primary' : 'filter'}"
-                                    label="Tous"
-                                    size="sm"
-                                    ?active="${this.latestSectorFilter === ''}"
-                                    .theme="${this.theme}"
-                                    @click="${(e) => { this.latestSectorFilter = ''; this.requestUpdate(); }}"
-                                ></app-button>
+                                <button
+                                    class="latest-filter-btn ${this.latestSectorFilter === '' ? 'active' : ''}"
+                                    @click="${(e) => { e.stopPropagation(); this.latestSectorFilter = ''; this.requestUpdate(); }}"
+                                >Tous</button>
                                 ${this.uniqueSectors.map(sector => html`
-                                    <app-button
-                                        variant="${this.latestSectorFilter === sector ? 'primary' : 'filter'}"
-                                        label="${sector}"
-                                        size="sm"
-                                        ?active="${this.latestSectorFilter === sector}"
-                                        .theme="${this.theme}"
-                                        @click="${(e) => this._handleLatestSectorFilter(e, sector)}"
-                                    ></app-button>
+                                    <button
+                                        class="latest-filter-btn ${this.latestSectorFilter === sector ? 'active' : ''}"
+                                        @click="${(e) => { e.stopPropagation(); this._handleLatestSectorFilter(e, sector); }}"
+                                    >${sector}</button>
                                 `)}
                             </div>
                         </div>
@@ -863,16 +1042,45 @@ export class AnalysisPage extends BaseComponent {
                         <div>Aucune analyse récente</div>
                     </div>
                 ` : html`
-                    <div class="latest-grid">
-                        ${latest.map(a => html`
-                            <analysis-history-card
-                                theme="${this.theme}"
-                                .analysis="${a}"
-                                .allAnalyses="${this.analyses}"
-                                @select="${this._handleAnalysisSelect}"
-                            ></analysis-history-card>
-                        `)}
-                    </div>
+                    ${(() => {
+                        const favs = latest.filter(a => this._isFavorite(a.ticker));
+                        const rest = latest.filter(a => !this._isFavorite(a.ticker));
+                        return html`
+                            ${favs.length > 0 ? html`
+                                <div class="latest-grid">
+                                    ${favs.map(a => html`
+                                        <div style="position: relative;">
+                                            <button class="fav-btn active" title="Retirer des favoris" @click="${(e) => this._toggleFavorite(e, a.ticker)}" style="position:absolute;top:8px;right:8px;z-index:2;">★</button>
+                                            <analysis-history-card
+                                                theme="${this.theme}"
+                                                .analysis="${a}"
+                                                .allAnalyses="${this.analyses}"
+                                                @select="${this._handleAnalysisSelect}"
+                                            ></analysis-history-card>
+                                        </div>
+                                    `)}
+                                </div>
+                                ${rest.length > 0 ? html`
+                                    <div class="favorites-separator">Autres actions</div>
+                                ` : ''}
+                            ` : ''}
+                            ${rest.length > 0 ? html`
+                                <div class="latest-grid">
+                                    ${rest.map(a => html`
+                                        <div style="position: relative;">
+                                            <button class="fav-btn" title="Ajouter aux favoris" @click="${(e) => this._toggleFavorite(e, a.ticker)}" style="position:absolute;top:8px;right:8px;z-index:2;">☆</button>
+                                            <analysis-history-card
+                                                theme="${this.theme}"
+                                                .analysis="${a}"
+                                                .allAnalyses="${this.analyses}"
+                                                @select="${this._handleAnalysisSelect}"
+                                            ></analysis-history-card>
+                                        </div>
+                                    `)}
+                                </div>
+                            ` : ''}
+                        `;
+                    })()}
                 `}
             </div>
         `;
@@ -887,103 +1095,59 @@ export class AnalysisPage extends BaseComponent {
         const mood = s.market_mood || 'Neutre';
 
         return html`
-            <div class="latest-section" style="margin-bottom: 16px;">
-                <div class="section-header">
-                    <div class="section-title">
-                        <span class="icon">📋</span>
-                        Resume du Marche
+            <div class="market-panel ${this.marketSummaryExpanded ? 'expanded' : ''}">
+                <div class="market-panel-header" @click="${this._toggleMarketSummary}">
+                    <div class="market-header-left">
+                        <span class="market-panel-title">📋 Résumé du Marché</span>
+                        <span style="
+                            font-size: 0.65rem;
+                            font-weight: 700;
+                            padding: 2px 8px;
+                            border-radius: var(--radius-full);
+                            color: ${moodColor[mood] || 'var(--text-muted)'};
+                            border: 1px solid ${moodColor[mood] || 'var(--text-muted)'};
+                        ">${moodEmoji[mood] || ''} ${mood}</span>
                     </div>
-                    <span style="
-                        font-size: 0.7rem;
-                        font-weight: 700;
-                        padding: 3px 10px;
-                        border-radius: var(--radius-full);
-                        color: ${moodColor[mood] || 'var(--text-muted)'};
-                        border: 1px solid ${moodColor[mood] || 'var(--text-muted)'};
-                        background: ${moodColor[mood] || 'var(--text-muted)'}15;
-                    ">${moodEmoji[mood] || ''} ${mood}</span>
+                    <span class="market-toggle-icon">›</span>
                 </div>
+                <div class="market-panel-content">
+                    <div class="market-content-inner">
+                        ${(s.top_picks && s.top_picks.length > 0) ? html`
+                            <div class="market-badges-row">
+                                <span class="market-badges-label" style="color: var(--success);">Acheter:</span>
+                                ${s.top_picks.map(p => html`
+                                    <span class="market-badge buy" title="${p.raison || ''}">${p.ticker}</span>
+                                `)}
+                            </div>
+                        ` : ''}
 
-                <div style="
-                    background: var(--bg-secondary);
-                    border: 1px solid var(--border-color);
-                    border-radius: var(--radius-md);
-                    padding: 16px;
-                ">
-                    <p style="color: var(--text-primary); font-size: 0.85rem; margin: 0 0 12px 0; line-height: 1.6;">
-                        ${s.summary || ''}
-                    </p>
+                        ${(s.sells && s.sells.length > 0) ? html`
+                            <div class="market-badges-row">
+                                <span class="market-badges-label" style="color: var(--danger);">Vendre:</span>
+                                ${s.sells.map(p => html`
+                                    <span class="market-badge sell" title="${p.raison || ''}">${p.ticker}</span>
+                                `)}
+                            </div>
+                        ` : ''}
 
-                    ${(s.top_picks && s.top_picks.length > 0) ? html`
-                        <div style="margin-bottom: 8px;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: var(--success); margin-right: 6px;">
-                                A Acheter:
-                            </span>
-                            ${s.top_picks.map(p => html`
-                                <span title="${p.raison || ''}" style="
-                                    display: inline-block;
-                                    padding: 2px 8px;
-                                    margin: 2px;
-                                    background: rgba(6,214,160,0.1);
-                                    border: 1px solid var(--success);
-                                    border-radius: var(--radius-full);
-                                    font-size: 0.7rem;
-                                    font-weight: 700;
-                                    color: var(--success);
-                                    cursor: help;
-                                ">${p.ticker}</span>
-                            `)}
-                        </div>
-                    ` : ''}
+                        ${(s.sector_performance && s.sector_performance.length > 0) ? html`
+                            <div class="market-badges-row">
+                                ${s.sector_performance.map(sp => {
+                                    const tColor = sp.trend === 'Haussier' ? 'var(--success)' : sp.trend === 'Baissier' ? 'var(--danger)' : 'var(--text-muted)';
+                                    return html`
+                                        <span class="market-badge sector" style="color: ${tColor};" title="${sp.comment || ''}">${sp.trend === 'Haussier' ? '▲' : sp.trend === 'Baissier' ? '▼' : '●'} ${sp.sector}</span>
+                                    `;
+                                })}
+                            </div>
+                        ` : ''}
 
-                    ${(s.sells && s.sells.length > 0) ? html`
-                        <div style="margin-bottom: 8px;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: var(--danger); margin-right: 6px;">
-                                A Vendre:
-                            </span>
-                            ${s.sells.map(p => html`
-                                <span title="${p.raison || ''}" style="
-                                    display: inline-block;
-                                    padding: 2px 8px;
-                                    margin: 2px;
-                                    background: rgba(255,51,102,0.1);
-                                    border: 1px solid var(--danger);
-                                    border-radius: var(--radius-full);
-                                    font-size: 0.7rem;
-                                    font-weight: 700;
-                                    color: var(--danger);
-                                    cursor: help;
-                                ">${p.ticker}</span>
-                            `)}
-                        </div>
-                    ` : ''}
-
-                    ${(s.sector_performance && s.sector_performance.length > 0) ? html`
-                        <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
-                            ${s.sector_performance.map(sp => {
-                                const tColor = sp.trend === 'Haussier' ? 'var(--success)' : sp.trend === 'Baissier' ? 'var(--danger)' : 'var(--text-muted)';
-                                return html`
-                                    <span title="${sp.comment || ''}" style="
-                                        display: inline-block;
-                                        padding: 2px 8px;
-                                        background: var(--bg-primary);
-                                        border: 1px solid var(--border-color);
-                                        border-radius: var(--radius-sm);
-                                        font-size: 0.65rem;
-                                        color: ${tColor};
-                                        cursor: help;
-                                    ">${sp.trend === 'Haussier' ? '▲' : sp.trend === 'Baissier' ? '▼' : '●'} ${sp.sector}</span>
-                                `;
-                            })}
-                        </div>
-                    ` : ''}
-
-                    ${this.marketSummary.generated_at ? html`
-                        <div style="font-size: 0.6rem; color: var(--text-muted); margin-top: 10px;">
-                            Genere le ${new Date(this.marketSummary.generated_at).toLocaleString('fr-CH')}
-                            · ${this.marketSummary.tickers_analyzed || 0} actions analysees
-                        </div>
-                    ` : ''}
+                        ${this.marketSummary.generated_at ? html`
+                            <div class="market-meta">
+                                ${new Date(this.marketSummary.generated_at).toLocaleString('fr-CH')}
+                                · ${this.marketSummary.tickers_analyzed || 0} actions
+                            </div>
+                        ` : ''}
+                    </div>
                 </div>
             </div>
         `;
