@@ -20,4 +20,4 @@ COPY app/ .
 # Créer le dossier data
 RUN mkdir -p /app/data
 
-CMD ["python", "analyzer.py"]
+CMD ["python", "analyzer.py", "--daemon"]

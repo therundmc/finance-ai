@@ -820,6 +820,10 @@ def check_new_tickers_job():
 if __name__ == "__main__":
     import schedule
     import argparse
+    import pytz
+    
+    # Timezone Suisse
+    TZ_SWISS = pytz.timezone('Europe/Zurich')
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Financial AI Analyzer')
@@ -828,6 +832,8 @@ if __name__ == "__main__":
     parser.add_argument('--check', action='store_true', help='Check which tickers need analysis (dry run)')
     parser.add_argument('--portfolio', action='store_true', help='Run portfolio analysis')
     parser.add_argument('--portfolio-force', action='store_true', help='Force portfolio analysis regardless of last analysis date')
+    parser.add_argument('--news', action='store_true', help='Run news summary only')
+    parser.add_argument('--daemon', action='store_true', help='Run as daemon with smart scheduler')
     args = parser.parse_args()
     
     # Handle single ticker analysis mode
@@ -848,6 +854,15 @@ if __name__ == "__main__":
             print(f"\n🆕 Tickers jamais analysés: {', '.join(never_analyzed)}")
         exit(0)
     
+    # Handle news summary only
+    if args.news:
+        if NEWS_AVAILABLE:
+            print("\n📰 Génération résumés news...")
+            update_news_summaries(force=True)
+        else:
+            print("⚠️ News module non disponible")
+        exit(0)
+    
     # Handle portfolio analysis modes
     if args.portfolio or args.portfolio_force:
         if args.portfolio_force:
@@ -866,64 +881,139 @@ if __name__ == "__main__":
         run_analysis()
         exit(0)
 
+    # Si pas de mode daemon, exécuter analyse unique et quitter
+    if not args.daemon:
+        print("\n🚀 Exécution unique (pas de scheduler)")
+        print("   Utiliser --daemon pour lancer le scheduler en continu\n")
+        
+        if NEWS_AVAILABLE:
+            print("📰 Génération des résumés d'actualités...")
+            update_news_summaries()
+        
+        run_smart_analysis(force=False, on_startup=True)
+        
+        print("\n💼 Analyse portefeuille...")
+        run_portfolio_analysis()
+        
+        print("\n✅ Analyse terminée")
+        exit(0)
+
+    # ============================================
+    # MODE DAEMON - SMART SCHEDULER EFFICACE
+    # ============================================
+    
     print("""
-╔═══════════════════════════════════════════════════════════╗
-║   🤖 BOT D'ANALYSE FINANCIÈRE (V5 - SIMPLIFIED)           ║
-║   🌙 Analyse nocturne quotidienne à 03:00                 ║
-║   ✅ Smart scheduling: ne relance pas si déjà fait        ║
-║   ✅ Nouveaux tickers: analyse immédiate                  ║
-║   ✅ Force mode: --force pour forcer l'analyse            ║
-║   ✅ Portfolio: --portfolio / --portfolio-force           ║
-╚═══════════════════════════════════════════════════════════╝
+╔════════════════════════════════════════════════════════════════╗
+║         SMART SCHEDULER - CONFIGURATION EFFICACE               ║
+╠════════════════════════════════════════════════════════════════╣
+║                                                                ║
+║  📰 NEWS SUMMARY - 1×/jour                                     ║
+║     └─ 07:00 CH - Briefing matinal (news overnight)           ║
+║                                                                ║
+║  💼 PORTFOLIO ANALYSIS - 2×/jour                               ║
+║     ├─ 07:30 CH - Vue matinale (avant Europe)                 ║
+║     └─ 22:00 CH - Post-marché US (après clôture 16h ET)       ║
+║                                                                ║
+║  📊 TICKERS ANALYSIS - 1×/jour                                 ║
+║     └─ 14:30 CH - Pré-ouverture US (08:30 ET)                 ║
+║                                                                ║
+╠════════════════════════════════════════════════════════════════╣
+║  💰 COÛT ESTIMÉ: ~$3.50/mois                                   ║
+║  ⏱️  TIMEZONE: Europe/Zurich (CH)                              ║
+║  📅 JOURS: Lundi-Vendredi (marchés ouverts)                   ║
+╚════════════════════════════════════════════════════════════════╝
 """)
 
-    config = load_config()
-    tickers = config.get('tickers', [])
-    
-    # Initialize last known tickers (module-level variable)
-    _last_known_tickers.clear()
-    _last_known_tickers.update(tickers)
-    
-    # Catégoriser les tickers par marché
-    tickers_by_market = categorize_tickers_by_market(tickers)
-    
-    print("📊 Actions configurées par marché:")
-    for market, market_tickers in tickers_by_market.items():
-        market_name = MARKET_SCHEDULES.get(market, {}).get('name', market)
-        print(f"   🏛️ {market_name}: {', '.join(market_tickers)}")
-    print()
+    def log_task(task_name):
+        """Log l'exécution d'une tâche"""
+        now = datetime.now(TZ_SWISS)
+        print(f"\n{'='*70}")
+        print(f"⏰ {now.strftime('%Y-%m-%d %H:%M:%S')} CH - {task_name}")
+        print(f"{'='*70}\n")
 
-    # ===== SCHEDULER NIGHTLY JOB (03:00) =====
-    print("🌙 Analyse nocturne programmée: tous les jours à 03:00")
-    print("   → Résumés d'actualités + Analyse des tickers")
-    schedule.every().day.at("03:00").do(nightly_job)
-    print()
+    def run_news_job():
+        """📰 NEWS - 07:00"""
+        log_task("📰 NEWS SUMMARY - Briefing matinal")
+        if NEWS_AVAILABLE:
+            update_news_summaries(force=True)
+            print("✅ News summary complété\n")
+        else:
+            print("⚠️ News module non disponible\n")
 
-    # ===== SCHEDULER FOR NEW TICKERS (toutes les 5 minutes) =====
-    print("🔍 Vérification des nouveaux tickers: toutes les 5 minutes")
-    schedule.every(5).minutes.do(check_new_tickers_job)
-    print()
+    def run_tickers_job():
+        """📊 TICKERS - 14:30"""
+        log_task("📊 TICKERS ANALYSIS - Pré-ouverture US")
+        today = datetime.now().strftime('%Y-%m-%d')
+        set_last_batch_analysis_date(today)
+        run_analysis()
+        print("✅ Tickers analysis complété\n")
 
-    # ===== STARTUP CHECK =====
-    print("🚀 Vérification au démarrage...")
-    
-    # Check if news summaries need to be generated
-    if NEWS_AVAILABLE:
-        print("📰 Génération des résumés d'actualités...")
-        update_news_summaries()
-    
-    # Smart analysis on startup - check if already ran today
-    run_smart_analysis(force=False, on_startup=True)
-    
-    # Portfolio analysis - après les analyses des stocks
-    print("\n💼 Vérification de l'analyse portefeuille...")
-    run_portfolio_analysis()
+    def run_portfolio_morning_job():
+        """💼 PORTFOLIO - 07:30"""
+        log_task("💼 PORTFOLIO ANALYSIS - Vue matinale")
+        run_portfolio_analysis(force=True)
+        print("✅ Portfolio analysis (matin) complété\n")
 
-    print("\n" + "="*60)
+    def run_portfolio_evening_job():
+        """💼 PORTFOLIO - 22:00"""
+        log_task("💼 PORTFOLIO ANALYSIS - Post-marché US")
+        run_portfolio_analysis(force=True)
+        print("✅ Portfolio analysis (soir) complété\n")
+
+    # Tâches programmées (Lundi-Vendredi uniquement)
+    
+    # 07:00 - News Summary
+    schedule.every().monday.at("07:00").do(run_news_job)
+    schedule.every().tuesday.at("07:00").do(run_news_job)
+    schedule.every().wednesday.at("07:00").do(run_news_job)
+    schedule.every().thursday.at("07:00").do(run_news_job)
+    schedule.every().friday.at("07:00").do(run_news_job)
+    
+    # 07:30 - Portfolio Morning
+    schedule.every().monday.at("07:30").do(run_portfolio_morning_job)
+    schedule.every().tuesday.at("07:30").do(run_portfolio_morning_job)
+    schedule.every().wednesday.at("07:30").do(run_portfolio_morning_job)
+    schedule.every().thursday.at("07:30").do(run_portfolio_morning_job)
+    schedule.every().friday.at("07:30").do(run_portfolio_morning_job)
+    
+    # 14:30 - Tickers Analysis (pré-ouverture US)
+    schedule.every().monday.at("14:30").do(run_tickers_job)
+    schedule.every().tuesday.at("14:30").do(run_tickers_job)
+    schedule.every().wednesday.at("14:30").do(run_tickers_job)
+    schedule.every().thursday.at("14:30").do(run_tickers_job)
+    schedule.every().friday.at("14:30").do(run_tickers_job)
+    
+    # 22:00 - Portfolio Evening (post-marché US)
+    schedule.every().monday.at("22:00").do(run_portfolio_evening_job)
+    schedule.every().tuesday.at("22:00").do(run_portfolio_evening_job)
+    schedule.every().wednesday.at("22:00").do(run_portfolio_evening_job)
+    schedule.every().thursday.at("22:00").do(run_portfolio_evening_job)
+    schedule.every().friday.at("22:00").do(run_portfolio_evening_job)
+
+    now = datetime.now(TZ_SWISS)
+    print(f"⏰ Démarré à: {now.strftime('%Y-%m-%d %H:%M:%S')} CH")
+    print(f"📅 Jour: {now.strftime('%A')}\n")
+    
+    # Afficher les prochaines tâches
+    jobs = schedule.get_jobs()
+    if jobs:
+        print("📋 Prochaines tâches programmées:\n")
+        sorted_jobs = sorted(jobs, key=lambda j: j.next_run)
+        for job in sorted_jobs[:10]:
+            task_name = job.job_func.__name__.replace('run_', '').replace('_job', '').replace('_', ' ').title()
+            next_run = job.next_run.strftime('%a %d/%m %H:%M')
+            print(f"   ⏰ {next_run} - {task_name}")
+    
+    print("\n" + "="*70)
     print("🔄 Scheduler actif - En attente des prochains jobs...")
-    print("   🌙 Prochain job nocturne: 03:00")
-    print("="*60 + "\n")
+    print("⌨️  Ctrl+C pour arrêter")
+    print("="*70 + "\n")
 
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+    except KeyboardInterrupt:
+        print("\n\n" + "="*70)
+        print("⏹️  SCHEDULER ARRÊTÉ")
+        print("="*70 + "\n")

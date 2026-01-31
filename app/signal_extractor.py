@@ -66,9 +66,9 @@ def _try_parse_json(analysis_text):
         if not resume or len(resume) < 10:
             resume = data.get('conclusion', f"Analyse {signal.lower()} avec conviction {conviction.lower()}.")
         
-        # Limiter longueur résumé
-        if len(resume) > 250:
-            resume = resume[:247] + '...'
+        # Limiter longueur résumé (augmenté à 1000 pour plus de détails)
+        if len(resume) > 1000:
+            resume = resume[:997] + '...'
         
         return {
             'signal': signal,

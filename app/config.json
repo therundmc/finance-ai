@@ -24,9 +24,17 @@
   "max_deep_analyses_per_day": 20,
   "claude_models": {
     "screening": "claude-haiku-4-5-20251001",
-    "deep_analysis": "claude-sonnet-4-5-20250929",
-    "portfolio": "claude-sonnet-4-5-20250929"
+    "deep_analysis": "claude-haiku-4-5-20251001",
+    "portfolio": "claude-sonnet-4-5-20250929",
+    "news": "claude-haiku-4-5-20251001"
   },
+  "claude_tokens": {
+    "screening": 256,
+    "deep_analysis": 2800,
+    "portfolio": 3500,
+    "news": 700
+  },
+  "model": "mistral-nemo",
   "trading": {
     "buy_commission": 10.0,
     "sell_commission": 12.0,

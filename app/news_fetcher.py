@@ -233,9 +233,9 @@ def generate_news_summary(tickers: List[str], category: str = 'all') -> Dict[str
     
     # News des actions suivies
     for ticker in tickers:
-        for article in fetcher.get_company_news(ticker)[:5]:
+        for article in fetcher.get_company_news(ticker)[:8]:  # Augmenté de 5 à 8 par ticker
             news['my_stocks'].append(article)
-    news['my_stocks'] = sorted(news['my_stocks'], key=lambda x: x['datetime'], reverse=True)[:15]
+    news['my_stocks'] = sorted(news['my_stocks'], key=lambda x: x['datetime'], reverse=True)[:25]  # Augmenté de 15 à 25
     
     # Générer les résumés
     categories = ['my_stocks', 'market', 'tech'] if category == 'all' else [category]
@@ -251,7 +251,7 @@ def generate_news_summary(tickers: List[str], category: str = 'all') -> Dict[str
             print(f"\n⚠️ Pas d'articles pour {cat}")
             summaries[cat] = {'summary': "Aucune actualité disponible.", 'article_count': 0}
             continue
-        used_count = min(len(articles), 8)
+        used_count = min(len(articles), max_articles := {'my_stocks': 20, 'market': 15, 'tech': 15}.get(cat, 15))
         print(f"\n🔄 Génération résumé pour {cat} ({used_count}/{len(articles)} articles)...")
         summaries[cat] = _generate_summary(cat, articles, tickers)
         print(f"   ✅ Résumé généré: {len(summaries[cat].get('summary', ''))} chars")
@@ -262,88 +262,89 @@ def generate_news_summary(tickers: List[str], category: str = 'all') -> Dict[str
 
 def _generate_summary(category: str, articles: List[Dict], tickers: List[str]) -> Dict[str, Any]:
     """Génère un résumé IA pour une catégorie"""
+    from config import CLAUDE_CONFIG
     
-    # Contexte des articles - filtrer et formater proprement (limité à 8 pour rapidité)
+    # Adapter le nombre d'articles selon la catégorie
+    max_articles = {
+        'my_stocks': 20,  # Plus d'articles pour ton portfolio
+        'market': 15,     # Vue d'ensemble macro
+        'tech': 15        # Secteur tech
+    }
+    article_limit = max_articles.get(category, 15)
+    
+    # Contexte des articles - filtrer et formater proprement
     context = "\n".join([
         f"• [{a.get('source', 'Unknown')}] {a['headline']} — {a['summary'][:200]}"
-        for a in articles[:8]
+        for a in articles[:article_limit]
     ])
     
     # Instructions selon la catégorie
     tickers_str = ', '.join(tickers[:5])
     
     prompts = {
-        'my_stocks': f"""Tu es un analyste financier senior avec 20 ans d'expérience. Analyse en profondeur ces actualités concernant mon portefeuille d'actions ({tickers_str}).
+        'my_stocks': f"""Analyse ces actualités sur mon portefeuille ({tickers_str}).
 
-ACTUALITÉS À ANALYSER:
+ACTUALITÉS:
 {context}
 
-ANALYSE REQUISE:
-1. **Synthèse des événements majeurs** : Identifie les 2-3 actualités les plus impactantes pour ces actions
-2. **Impact sur les cours** : Explique comment ces nouvelles pourraient affecter les prix à court terme (1-5 jours) et moyen terme (1-3 mois)
-3. **Catalyseurs identifiés** : Repère les éléments qui pourraient déclencher des mouvements (earnings, annonces, rumeurs M&A, etc.)
-4. **Risques à surveiller** : Mentionne les menaces potentielles ou signaux d'alerte
-5. **Sentiment de marché** : Évalue le sentiment global (très haussier/haussier/neutre/baissier/très baissier) avec justification
+FOURNIS (5-7 phrases MAX):
+1. 2-3 événements majeurs
+2. Impact court terme (1 phrase)
+3. Catalyseurs (1 phrase)
+4. Risques (1 phrase)
+5. Sentiment global avec justification (1 phrase)
 
-FORMAT: Rédige 5-7 phrases fluides en français, sans listes à puces. Sois précis avec les chiffres et pourcentages quand disponibles.
+Sois CONCIS et PRÉCIS.""",
 
-ANALYSE:""",
+        'market': f"""Analyse l'état des marchés.
 
-        'market': f"""Tu es un stratégiste de marché senior. Analyse l'état actuel des marchés financiers mondiaux.
-
-ACTUALITÉS À ANALYSER:
+ACTUALITÉS:
 {context}
 
-ANALYSE REQUISE:
-1. **Tendance des indices** : État du S&P 500, Nasdaq, Dow Jones, et marchés européens
-2. **Facteurs macro-économiques** : Politique monétaire (Fed, BCE), inflation, emploi, croissance
-3. **Secteurs en mouvement** : Identifie les secteurs leaders et retardataires du jour
-4. **Événements clés** : Rappelle les catalyseurs importants (earnings saison, données économiques, géopolitique)
-5. **Volatilité et sentiment** : VIX, flux institutionnels, sentiment des investisseurs
-6. **Perspective court terme** : Ton avis sur la direction probable des prochains jours
+FOURNIS (5-7 phrases MAX):
+1. Indices principaux (1 phrase)
+2. Facteurs macro (Fed, inflation, emploi) (1 phrase)
+3. Secteurs leaders/retardataires (1 phrase)
+4. Événements clés (1 phrase)
+5. Perspective court terme (1 phrase)
 
-FORMAT: Rédige 5-7 phrases fluides en français, sans listes à puces. Utilise des données chiffrées quand disponibles.
+Sois CONCIS.""",
 
-ANALYSE:""",
+        'tech': f"""Analyse l'actualité tech.
 
-        'tech': f"""Tu es un analyste spécialisé dans le secteur technologique. Analyse en profondeur l'actualité tech et son impact boursier.
-
-ACTUALITÉS À ANALYSER:
+ACTUALITÉS:
 {context}
 
-ANALYSE REQUISE:
-1. **GAFAM & Mega-caps** : Actualités Apple, Microsoft, Google, Amazon, Meta, Nvidia, Tesla
-2. **Semiconducteurs** : État du secteur (Nvidia, AMD, Intel, TSMC, ASML) et chaîne d'approvisionnement
-3. **Intelligence Artificielle** : Développements IA, investissements, compétition, régulation
-4. **Cloud & SaaS** : Tendances du cloud computing et software
-5. **Startups & IPO** : Mouvements notables dans l'écosystème tech
-6. **Valorisations** : Commentaire sur les multiples du secteur et risques de correction
-7. **Perspective** : Ton avis sur l'attractivité du secteur tech actuellement
+FOURNIS (5-7 phrases MAX):
+1. GAFAM & mega-caps (1 phrase)
+2. Semi-conducteurs (1 phrase)
+3. IA et cloud (1 phrase)
+4. Valorisations secteur (1 phrase)
+5. Perspective (1 phrase)
 
-FORMAT: Rédige 5-7 phrases fluides en français, sans listes à puces. Mentionne les variations de cours quand pertinent.
-
-ANALYSE:"""
+Sois CONCIS."""
     }
     
     prompt = prompts.get(category, prompts['market'])
 
-    model = _get_claude_model()
-    print(f"   🤖 Appel Claude API avec modèle {model}")
+    # Utiliser config Claude pour news
+    news_config = CLAUDE_CONFIG['news']
+    model = news_config['model']
+    max_tokens = news_config['max_tokens']
+    
+    print(f"   🤖 Appel Claude API: {model} ({max_tokens} tokens)")
     
     # System prompt pour Claude
     system_prompt = """Tu es un analyste financier senior avec 20 ans d'expérience.
 Tu analyses les actualités financières avec précision et profondeur.
 Réponds en français, de manière fluide et professionnelle.
-Ne mets PAS de balises de raisonnement, commence directement par l'analyse."""
+Ne mets PAS de balises de raisonnement, commence directement par l'analyse.
+SOIS CONCIS: 5-7 phrases maximum."""
     
     try:
         if not ANTHROPIC_API_KEY:
-            print(f"   ❌ ANTHROPIC_API_KEY manquante")
-            return {
-                'summary': "Clé API Claude manquante. Configurer ANTHROPIC_API_KEY dans .env",
-                'article_count': len(articles),
-                'error': 'missing_api_key'
-            }
+            print(f"   ⚠️ ANTHROPIC_API_KEY manquante - Fallback Ollama")
+            return _fallback_ollama_news(prompt, category, articles)
         
         headers = {
             "x-api-key": ANTHROPIC_API_KEY,
@@ -353,7 +354,7 @@ Ne mets PAS de balises de raisonnement, commence directement par l'analyse."""
         
         data = {
             "model": model,
-            "max_tokens": 1000,
+            "max_tokens": max_tokens,
             "temperature": 0.7,
             "system": system_prompt,
             "messages": [
@@ -379,10 +380,12 @@ Ne mets PAS de balises de raisonnement, commence directement par l'analyse."""
         else:
             error_msg = response.text[:200] if hasattr(response, 'text') else str(response)
             print(f"   ❌ Erreur Claude API: {error_msg}")
+            print(f"   🔄 Fallback vers Ollama...")
+            return _fallback_ollama_news(prompt, category, articles)
     except Exception as e:
-        print(f"   ❌ Exception génération résumé: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"   ❌ Exception Claude: {e}")
+        print(f"   🔄 Fallback vers Ollama...")
+        return _fallback_ollama_news(prompt, category, articles)
     
     # Fallback
     return {
@@ -391,3 +394,74 @@ Ne mets PAS de balises de raisonnement, commence directement par l'analyse."""
         'sources': list(set(a['source'] for a in articles[:5])),
         'is_fallback': True
     }
+
+
+def _fallback_ollama_news(prompt: str, category: str, articles: List[Dict]) -> Dict[str, Any]:
+    """
+    Fallback vers Ollama local pour génération de résumé news
+    """
+    try:
+        import ollama
+        
+        # Récupérer config Ollama
+        try:
+            with open('/app/config.json', 'r') as f:
+                config = json.load(f)
+                local_model = config.get('model', 'mistral-nemo')
+                num_threads = config.get('num_threads', 12)
+        except:
+            local_model = 'mistral-nemo'
+            num_threads = 12
+        
+        print(f"   🤖 Ollama local: {local_model}")
+        
+        # Nettoyer le prompt (enlever instructions spécifiques Claude)
+        clean_prompt = f"""{prompt}
+
+IMPORTANT: Réponds UNIQUEMENT avec l'analyse demandée. Ne mets PAS de balises <think>. Commence directement par l'analyse."""
+        
+        response = ollama.chat(
+            model=local_model,
+            messages=[
+                {'role': 'user', 'content': clean_prompt}
+            ],
+            options={
+                'temperature': 0.7,
+                'num_predict': 500,
+                'num_thread': num_threads
+            }
+        )
+        
+        summary_text = response['message']['content'] if 'message' in response else ""
+        
+        # Nettoyer balises thinking si présentes
+        summary_text = summary_text.replace('<think>', '').replace('</think>', '').strip()
+        
+        print(f"   ✅ Ollama résumé: {len(summary_text)} chars")
+        
+        return {
+            'summary': summary_text,
+            'article_count': len(articles),
+            'sources': list(set(a['source'] for a in articles[:5])),
+            'generated_at': datetime.now().isoformat(),
+            'fallback': 'ollama'
+        }
+        
+    except ImportError:
+        print(f"   ❌ Module ollama non installé")
+        return {
+            'summary': "Points clés: " + " • ".join(a['headline'] for a in articles[:3]),
+            'article_count': len(articles),
+            'sources': list(set(a['source'] for a in articles[:5])),
+            'is_fallback': True,
+            'error': 'ollama_not_installed'
+        }
+    except Exception as e:
+        print(f"   ❌ Erreur Ollama: {e}")
+        return {
+            'summary': "Points clés: " + " • ".join(a['headline'] for a in articles[:3]),
+            'article_count': len(articles),
+            'sources': list(set(a['source'] for a in articles[:5])),
+            'is_fallback': True,
+            'error': str(e)
+        }
