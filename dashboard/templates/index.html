@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Finance AI Dashboard</title>
+    <!-- Favicon -->
+        <link rel="icon" type="image/png" href="{{ url_for('static', filename='assets/ai-assistant.png') }}">
     
     <!-- Preconnect for performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -295,7 +297,7 @@
         <header id="main-header">
             <div class="header-content">
                 <div class="header-title">
-                    <h1><span class="emoji">🚀</span> Finance AI</h1>
+                        <h1><img src="{{ url_for('static', filename='assets/ai-assistant.gif') }}" alt="AI Icon" class="emoji" style="height: 2em; vertical-align: middle;"> Finance AI</h1>
                     <p class="subtitle">Made with ❤️ by Anca & Claude</p>
                 </div>
                 <div class="header-actions">

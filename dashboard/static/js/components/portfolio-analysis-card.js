@@ -768,7 +768,7 @@ export class PortfolioAnalysisCard extends BaseComponent {
     return html`
       <div class="analysis-card">
         <div class="card-header" @click=${this._toggle}>
-          <div class="header-icon">🤖</div>
+          <div class="header-icon"><img src="/static/assets/ai-assistant.png" alt="AI Assistant" style="height: 28px; width: 28px;"></div>
           <div class="header-main">
             <h3 class="header-title">Conseiller Financier</h3>
           </div>
@@ -821,7 +821,21 @@ export class PortfolioAnalysisCard extends BaseComponent {
                         <span class="plan-num">${i + 1}</span>
                         <div class="plan-content">
                           <div class="plan-main">
-                            <span class="plan-action-type">${parsed.action}</span>
+                            <span class="plan-action-type" style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:800;background:
+                              ${parsed.action && parsed.action.toLowerCase().includes('vendre') ? 'rgba(239,68,68,0.15)' :
+                                parsed.action && parsed.action.toLowerCase().includes('conserver') ? 'rgba(245,158,11,0.15)' :
+                                parsed.action && parsed.action.toLowerCase().includes('surveiller') ? 'rgba(124,58,237,0.15)' :
+                                parsed.action && parsed.action.toLowerCase().includes('acheter') ? 'rgba(16,185,129,0.15)' :
+                                parsed.action && parsed.action.toLowerCase().includes('alleger') ? 'rgba(59,130,246,0.15)' :
+                                'var(--bg-tertiary)'};
+                              color:
+                              ${parsed.action && parsed.action.toLowerCase().includes('vendre') ? 'var(--danger)' :
+                                parsed.action && parsed.action.toLowerCase().includes('conserver') ? 'var(--warning)' :
+                                parsed.action && parsed.action.toLowerCase().includes('surveiller') ? 'var(--brand-secondary)' :
+                                parsed.action && parsed.action.toLowerCase().includes('acheter') ? 'var(--success)' :
+                                parsed.action && parsed.action.toLowerCase().includes('alleger') ? 'var(--info,#3b82f6)' :
+                                'var(--text-primary)'};
+                            ">${parsed.action}</span>
                             ${parsed.ticker ? html`<span class="plan-ticker">${parsed.ticker}</span>` : ''}
                           </div>
                           ${(parsed.price || parsed.stopLoss || parsed.target || parsed.budget) ? html`
@@ -832,7 +846,7 @@ export class PortfolioAnalysisCard extends BaseComponent {
                               ${parsed.budget ? html`<span class="plan-detail-item"><span class="plan-detail-label">Budget:</span> ${parsed.budget} CHF</span>` : ''}
                             </div>
                           ` : ''}
-                          ${parsed.reason ? html`<div class="plan-reason">${parsed.reason}</div>` : ''}
+                          <div class="plan-step-raw" style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">${step}</div>
                         </div>
                       </div>
                     `;

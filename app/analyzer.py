@@ -851,10 +851,14 @@ def run_portfolio_analysis(force: bool = False):
                 print(f"   1 an:      {proj.get('expected_pnl_1y', '?')}%")
 
             # Conseils par position
+
             conseils = analysis_result.get('conseils_positions', [])
-            if conseils:
+            # Filter conseils to only owned positions (status 'open')
+            owned_tickers = set(p.get('ticker', '') for p in positions if p.get('status', 'open') == 'open')
+            conseils_owned = [c for c in conseils if c.get('ticker') in owned_tickers]
+            if conseils_owned:
                 print(f"\n📋 CONSEILS PAR POSITION:")
-                for conseil in conseils:
+                for conseil in conseils_owned:
                     ticker = conseil.get('ticker', 'N/A')
                     action = conseil.get('action', 'N/A')
                     urgence = conseil.get('urgence', '')

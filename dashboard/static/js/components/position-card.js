@@ -956,13 +956,16 @@ export class PositionCard extends BaseComponent {
               ${this.alertType ? html`
                 <app-badge variant="alert" type="${this.alertType}" size="sm">${alertMap[this.alertType]}</app-badge>
               ` : ''}
+              <!-- Advice badge always visible in header if available -->
+              ${this.aiAdvice && this.aiAdvice.action ? html`
+                <app-badge variant="advice" type="${this._getAdviceClass(this.aiAdvice.action)}" size="sm">${this.aiAdvice.action}</app-badge>
+              ` : ''}
             </div>
             <div class="summary">
               ${quantity} × ${sym}${entryPrice.toFixed(2)}
               ${p.stop_loss ? html` · SL: ${sym}${p.stop_loss.toFixed(2)}` : ''}
             </div>
           </div>
-          
           <div class="header-right">
             <div class="pnl-value ${isProfit ? 'positive' : 'negative'}">
               ${this.hideValues ? '••••••' : `${isProfit ? '+' : ''}${sym}${value.toFixed(2)}`}
@@ -972,17 +975,15 @@ export class PositionCard extends BaseComponent {
             </div>
             <div class="current-price">${sym}${currentPrice.toFixed(2)}</div>
           </div>
-          
           <div class="arrow">›</div>
         </div>
-        
         <div class="card-content">
           <!-- AI Advice -->
           ${this.aiAdvice ? html`
             <div class="ai-advice">
               <div class="ai-advice-header">
-                <span class="ai-advice-icon">🤖</span>
-                <span class="ai-advice-label">Analyse IA</span>
+                <span class="ai-advice-icon"><img src="/static/assets/ai-assistant.png" alt="AI Assistant" style="height: 22px; width: 22px;"></span>
+                <span class="ai-advice-label">Analyse Assistant</span>
                 <span class="ai-advice-action ${this._getAdviceClass(this.aiAdvice.action)}">${this.aiAdvice.action || 'Conserver'}</span>
               </div>
               <div class="ai-advice-text">${this.aiAdvice.conseil || this.aiAdvice.raison || this.aiAdvice.reason || ''}</div>
