@@ -59,8 +59,15 @@
   "investment_objective": "croissance long terme tech/defense",
   "model": "mistral-nemo",
   "trading": {
-    "buy_commission": 10.0,
-    "sell_commission": 12.0,
-    "commission_currency": "CHF"
+    "buy_commission_pct": 0.152,
+    "sell_commission_pct": 0.152,
+    "commission_currency": "USD",
+    "breakdown": {
+      "commission": 0.005,
+      "min_commission_usd": 1.0,
+      "fx_conversion": 0.002,
+      "stamp_duty_ch_only": 0.15
+    },
+    "notes": "Interactive Brokers - Tiered pricing $0.005/share, min $1, FX 0.002%"
   }
 }

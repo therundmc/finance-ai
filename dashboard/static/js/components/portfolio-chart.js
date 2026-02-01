@@ -294,7 +294,52 @@ export class PortfolioChart extends BaseComponent {
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
-      
+
+      /* Projections Footer */
+      .projections-footer {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+        padding: 6px var(--spacing-xs);
+        margin-top: 4px;
+        border-top: 1px solid var(--border-color);
+        opacity: 0.9;
+      }
+
+      .projection-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+      }
+
+      .projection-label {
+        font-size: 0.6rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+
+      .projection-value {
+        font-size: 0.75rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      .projection-value.positive {
+        color: var(--success);
+      }
+
+      .projection-value.negative {
+        color: var(--danger);
+      }
+
+      .projection-value.neutral {
+        color: var(--text-muted);
+      }
+
       /* No Data / Error States */
       .no-data-message,
       .error-message {
@@ -904,7 +949,12 @@ export class PortfolioChart extends BaseComponent {
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toFixed(1)}%`;
   }
-  
+
+  _getProjectionClass(value) {
+    if (value === undefined || value === null) return 'neutral';
+    return value >= 0 ? 'positive' : 'negative';
+  }
+
   render() {
     return html`
       <div class="portfolio-chart-inline">
@@ -987,6 +1037,29 @@ export class PortfolioChart extends BaseComponent {
               <span class="chart-label">${this.chartLabel}</span>
               <span class="chart-max">${this.hideValues ? '••••' : this._formatValue(this.maxValue)}</span>
             </div>
+
+            ${this.projections && this.mode === 'pnl' ? html`
+              <div class="projections-footer">
+                <div class="projection-item">
+                  <span class="projection-label">1 sem</span>
+                  <span class="projection-value ${this._getProjectionClass(this.projections.expected_pnl_1w)}">
+                    ${this._formatPercent(this.projections.expected_pnl_1w)}
+                  </span>
+                </div>
+                <div class="projection-item">
+                  <span class="projection-label">1 mois</span>
+                  <span class="projection-value ${this._getProjectionClass(this.projections.expected_pnl_1m)}">
+                    ${this._formatPercent(this.projections.expected_pnl_1m)}
+                  </span>
+                </div>
+                <div class="projection-item">
+                  <span class="projection-label">1 an</span>
+                  <span class="projection-value ${this._getProjectionClass(this.projections.expected_pnl_1y)}">
+                    ${this._formatPercent(this.projections.expected_pnl_1y)}
+                  </span>
+                </div>
+              </div>
+            ` : ''}
           ` : ''}
         </div>
       </div>

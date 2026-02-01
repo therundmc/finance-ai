@@ -443,6 +443,7 @@ def build_portfolio_analysis_prompt(positions, all_analyses, news_summaries=None
         str: Prompt formaté pour l'analyse IA du portefeuille
     """
     from datetime import datetime
+    import statistics
 
     config = config or {}
     news_summaries = news_summaries or {}
@@ -453,9 +454,21 @@ def build_portfolio_analysis_prompt(positions, all_analyses, news_summaries=None
     risk_level = config.get('risk_level', 'modere')
     objective = config.get('investment_objective', 'croissance long terme')
     trading = config.get('trading', {})
-    buy_commission = trading.get('buy_commission', 10)
-    sell_commission = trading.get('sell_commission', 12)
+
+    # Support both percentage and fixed commissions
+    buy_commission_pct = trading.get('buy_commission_pct')
+    sell_commission_pct = trading.get('sell_commission_pct')
+    buy_commission_fixed = trading.get('buy_commission', 10)
+    sell_commission_fixed = trading.get('sell_commission', 12)
     commission_currency = trading.get('commission_currency', 'CHF')
+
+    # Use percentage if available, otherwise use fixed
+    if buy_commission_pct is not None:
+        commission_text = f"achat {buy_commission_pct}%, vente {sell_commission_pct}%"
+        total_roundtrip_pct = (buy_commission_pct + sell_commission_pct) if buy_commission_pct else 0
+    else:
+        commission_text = f"achat {buy_commission_fixed} {commission_currency}, vente {sell_commission_fixed} {commission_currency}"
+        total_roundtrip_pct = 0
 
     # Portfolio totals
     total_invested = sum(p.get('entry_price', 0) * p.get('quantity', 1) for p in positions) if positions else 0
@@ -465,6 +478,62 @@ def build_portfolio_analysis_prompt(positions, all_analyses, news_summaries=None
 
     # Owned tickers
     owned_tickers = set(p.get('ticker', '') for p in positions) if positions else set()
+
+    # AMELIORATION #1: Récupérer l'historique des recommandations
+    from database import get_latest_portfolio_analysis
+    previous_analysis = get_latest_portfolio_analysis()
+
+    # AMELIORATION #2: Calculer le contexte macro
+    def calculate_macro_context(analyses):
+        """Calcule le contexte macro à partir des analyses disponibles"""
+        if not analyses:
+            return None
+
+        # Changements 1 jour
+        changes_1d = [a.get('change_1d', 0) for a in analyses.values() if a.get('change_1d') is not None]
+
+        if not changes_1d or len(changes_1d) < 2:
+            return None
+
+        avg_change = sum(changes_1d) / len(changes_1d)
+        volatility = statistics.stdev(changes_1d)
+
+        # Sentiment général
+        signals = [a.get('signal', '') for a in analyses.values()]
+        bullish = sum(1 for s in signals if 'ACHETER' in str(s).upper())
+        bearish = sum(1 for s in signals if 'VENDRE' in str(s).upper())
+        total_signals = len(signals)
+
+        bullish_pct = (bullish / total_signals * 100) if total_signals > 0 else 0
+        bearish_pct = (bearish / total_signals * 100) if total_signals > 0 else 0
+
+        # Déterminer le mood
+        if bullish > bearish * 1.5:
+            mood = 'BULL'
+        elif bearish > bullish * 1.5:
+            mood = 'BEAR'
+        else:
+            mood = 'NEUTRE'
+
+        # Niveau de volatilité
+        if volatility > 2.5:
+            vol_level = 'HAUTE'
+        elif volatility > 1.5:
+            vol_level = 'MODEREE'
+        else:
+            vol_level = 'FAIBLE'
+
+        return {
+            'avg_change_1d': avg_change,
+            'volatility': volatility,
+            'vol_level': vol_level,
+            'mood': mood,
+            'bullish_pct': bullish_pct,
+            'bearish_pct': bearish_pct,
+            'total_analyzed': total_signals
+        }
+
+    macro_context = calculate_macro_context(all_analyses)
 
     # NOUVEAU: Calculer la répartition sectorielle + MOMENTUM
     sector_allocation = {}
@@ -514,7 +583,7 @@ Maximise la probabilite de rendement positif. Recommande uniquement des achats a
 - **Budget disponible:** {budget:,.0f} {budget_currency}
 - **Niveau de risque:** {risk_level}
 - **Objectif:** {objective}
-- **Commissions:** achat {buy_commission} {commission_currency}, vente {sell_commission} {commission_currency}
+- **Commissions:** {commission_text}
 
 ## PORTEFEUILLE ACTUEL ({len(positions)} positions)
 - **Capital investi:** {total_invested:,.2f}$
@@ -566,6 +635,225 @@ Maximise la probabilite de rendement positif. Recommande uniquement des achats a
             prompt += f"- **{sector}**: {status}\n"
 
     prompt += "\n"
+
+    # AMELIORATION #3: Calculer la matrice de corrélation et risque caché
+    def calculate_correlation_risk(positions, analyses):
+        """
+        Calcule les corrélations entre positions et détecte les risques cachés.
+        Utilise secteur + momentum pour estimer corrélation.
+        """
+        if not positions or len(positions) < 2:
+            return None
+
+        # Grouper par secteur
+        by_sector = {}
+        for pos in positions:
+            ticker = pos.get('ticker', '')
+            analysis = analyses.get(ticker, {})
+            sector = analysis.get('sector', 'Unknown')
+
+            if sector not in by_sector:
+                by_sector[sector] = []
+            by_sector[sector].append({
+                'ticker': ticker,
+                'value': pos.get('current_price', pos.get('entry_price', 0)) * pos.get('quantity', 1),
+                'change_1mo': analysis.get('change_1mo', 0) or 0
+            })
+
+        # Identifier groupes fortement corrélés (même secteur)
+        high_correlation_groups = []
+        total_value = sum(p.get('current_price', p.get('entry_price', 0)) * p.get('quantity', 1) for p in positions)
+
+        for sector, tickers_data in by_sector.items():
+            if len(tickers_data) >= 2:  # Au moins 2 positions dans le secteur
+                sector_value = sum(t['value'] for t in tickers_data)
+                sector_pct = (sector_value / total_value * 100) if total_value > 0 else 0
+
+                # Estimer corrélation (même secteur = corrélation élevée ~0.7-0.9)
+                correlation_estimate = 0.75 + (len(tickers_data) * 0.05)  # Plus de tickers = plus corrélés
+                correlation_estimate = min(0.95, correlation_estimate)
+
+                # Calculer momentum moyen du groupe
+                avg_momentum = sum(t['change_1mo'] for t in tickers_data) / len(tickers_data)
+
+                high_correlation_groups.append({
+                    'sector': sector,
+                    'tickers': [t['ticker'] for t in tickers_data],
+                    'count': len(tickers_data),
+                    'allocation_pct': sector_pct,
+                    'correlation': correlation_estimate,
+                    'avg_momentum': avg_momentum,
+                    'value': sector_value
+                })
+
+        # Calculer score de diversification (0-100)
+        # Score élevé = bien diversifié, score bas = trop concentré/corrélé
+        diversification_score = 100
+
+        # Pénalité pour surconcentration sectorielle
+        for group in high_correlation_groups:
+            if group['allocation_pct'] > 40:
+                diversification_score -= 20
+            elif group['allocation_pct'] > 30:
+                diversification_score -= 10
+
+        # Pénalité pour trop peu de secteurs
+        num_sectors = len(by_sector)
+        if num_sectors == 1:
+            diversification_score -= 30
+        elif num_sectors == 2:
+            diversification_score -= 15
+
+        diversification_score = max(0, min(100, diversification_score))
+
+        # Calculer risque estimé en cas de crash sectoriel
+        worst_case_impact = {}
+        for group in high_correlation_groups:
+            # Si secteur chute de -20%, impact sur portfolio
+            sector_impact = group['allocation_pct'] * 0.20  # 20% de la valeur du secteur
+            worst_case_impact[group['sector']] = sector_impact
+
+        return {
+            'high_correlation_groups': high_correlation_groups,
+            'diversification_score': diversification_score,
+            'num_sectors': num_sectors,
+            'worst_case_impacts': worst_case_impact
+        }
+
+    correlation_risk = calculate_correlation_risk(positions, all_analyses)
+
+    # AMELIORATION #3: Afficher le risque de corrélation
+    if correlation_risk:
+        score = correlation_risk['diversification_score']
+        num_sectors = correlation_risk['num_sectors']
+
+        # Déterminer le niveau de risque
+        if score >= 70:
+            risk_level = "✅ BON"
+            risk_emoji = "🟢"
+        elif score >= 50:
+            risk_level = "⚠️ MOYEN"
+            risk_emoji = "🟡"
+        else:
+            risk_level = "🚨 ELEVÉ"
+            risk_emoji = "🔴"
+
+        prompt += f"""
+### RISQUE DE CORRELATION (CRITIQUE pour diversification réelle)
+- **Score de diversification**: {score}/100 {risk_emoji} ({risk_level})
+- **Nombre de secteurs**: {num_sectors}
+
+"""
+
+        # Afficher les groupes fortement corrélés
+        high_corr = correlation_risk['high_correlation_groups']
+        if high_corr:
+            prompt += "**GROUPES FORTEMENT CORRELES** (positions du même secteur = corrélation ~75-95%):\n"
+            for group in high_corr:
+                if group['count'] >= 2:
+                    tickers_str = ', '.join(group['tickers'])
+                    impact = correlation_risk['worst_case_impacts'].get(group['sector'], 0)
+
+                    # Emoji selon allocation
+                    if group['allocation_pct'] > 50:
+                        alloc_emoji = "🚨"
+                    elif group['allocation_pct'] > 35:
+                        alloc_emoji = "⚠️"
+                    else:
+                        alloc_emoji = "📊"
+
+                    prompt += f"""
+{alloc_emoji} **{group['sector']}**: {group['count']} positions ({tickers_str})
+   - Allocation: {group['allocation_pct']:.1f}% du portfolio
+   - Corrélation estimée: {group['correlation']:.2f}
+   - Momentum moyen: {group['avg_momentum']:+.1f}%
+   - ⚠️ Impact si crash secteur -20%: -{impact:.1f}% du portfolio total
+"""
+
+        # Recommandations basées sur le score
+        prompt += "\n**IMPLICATIONS POUR DIVERSIFICATION**:\n"
+        if score < 50:
+            prompt += "🚨 DIVERSIFICATION INSUFFISANTE: Portfolio très exposé aux risques sectoriels concentrés\n"
+            prompt += "   → PRIORITE ABSOLUE: Acheter dans secteurs NON représentés ou sous-représentés (<15%)\n"
+            prompt += "   → Éviter tout renforcement dans secteurs >40%\n"
+        elif score < 70:
+            prompt += "⚠️ DIVERSIFICATION LIMITEE: Amélioration recommandée\n"
+            prompt += "   → Privilégier achats dans secteurs <20% allocation\n"
+            prompt += "   → Prudence sur renforcement secteurs >35%\n"
+        else:
+            prompt += "✅ DIVERSIFICATION CORRECTE: Maintenir l'équilibre sectoriel\n"
+            prompt += "   → OK pour renforcer secteurs performants si <40% allocation\n"
+
+        prompt += "\n"
+
+    # AMELIORATION #2: Ajouter le contexte macro
+    if macro_context:
+        prompt += f"""
+### CONTEXTE MARCHE GLOBAL (CRITIQUE pour strategie)
+- **Tendance moyenne 1j**: {macro_context['avg_change_1d']:+.2f}% (sur {macro_context['total_analyzed']} tickers)
+- **Volatilité**: {macro_context['volatility']:.2f}% ({macro_context['vol_level']})
+- **Sentiment marché**: {macro_context['mood']}
+  - Signaux bullish: {macro_context['bullish_pct']:.0f}%
+  - Signaux bearish: {macro_context['bearish_pct']:.0f}%
+
+STRATEGIE ADAPTEE AU CONTEXTE:
+"""
+        # Stratégie selon contexte
+        if macro_context['mood'] == 'BULL' and macro_context['vol_level'] == 'FAIBLE':
+            prompt += "✅ **ENVIRONNEMENT FAVORABLE** (Bull + faible volatilité)\n"
+            prompt += "   → Stratégie AGGRESSIVE: Renforcer positions gagnantes, OK pour concentration modérée\n"
+            prompt += "   → Stop-loss: Standards (6-8%)\n"
+        elif macro_context['mood'] == 'BULL' and macro_context['vol_level'] in ['MODEREE', 'HAUTE']:
+            prompt += "⚠️ **BULL MARKET VOLATIL** (Haussier mais instable)\n"
+            prompt += "   → Stratégie EQUILIBREE: Profiter momentum MAIS prudence sur tailles positions\n"
+            prompt += "   → Stop-loss: Légèrement serrés (5-7%)\n"
+        elif macro_context['mood'] == 'BEAR':
+            prompt += "🚨 **ENVIRONNEMENT DEFENSIF** (Bear market)\n"
+            prompt += "   → Stratégie CONSERVATIVE: Préserver capital, diversification stricte\n"
+            prompt += "   → Stop-loss: Très serrés (4-6%)\n"
+            prompt += "   → Privilégier qualité et secteurs défensifs\n"
+        else:  # NEUTRE
+            prompt += "📊 **MARCHE MIXTE** (Sentiment neutre)\n"
+            prompt += "   → Stratégie SELECTIVE: Suivre momentum sectoriel, éviter paris hasardeux\n"
+            prompt += "   → Stop-loss: Standards (6-8%)\n"
+
+        prompt += "\n"
+
+    # AMELIORATION #1: Ajouter l'historique des recommandations
+    if previous_analysis:
+        prev_date = previous_analysis.get('created_at', previous_analysis.get('date', ''))
+        if isinstance(prev_date, str):
+            prev_date_str = prev_date[:10] if len(prev_date) >= 10 else prev_date
+        else:
+            prev_date_str = str(prev_date)[:10]
+
+        prev_achats = previous_analysis.get('achats_recommandes', [])
+        prev_ventes = previous_analysis.get('ventes_recommandees', [])
+
+        if prev_achats or prev_ventes:
+            prompt += f"""
+### RECOMMANDATIONS PRECEDENTES ({prev_date_str}) - COHERENCE TEMPORELLE OBLIGATOIRE
+
+"""
+            if prev_achats:
+                achats_tickers = [a.get('ticker', 'N/A') for a in prev_achats if isinstance(a, dict)]
+                prompt += f"**Achats suggérés précédemment**: {', '.join(achats_tickers)}\n"
+
+            if prev_ventes:
+                ventes_tickers = [v.get('ticker', 'N/A') for v in prev_ventes if isinstance(v, dict)]
+                prompt += f"**Ventes suggérées précédemment**: {', '.join(ventes_tickers)}\n"
+
+            prompt += f"""
+⚠️ REGLES DE COHERENCE TEMPORELLE (CRITIQUES):
+1. Si tu as recommandé d'ACHETER un ticker il y a <7 jours, ne recommande PAS de le VENDRE maintenant
+   SAUF si changement MAJEUR (cassure SL, news très négatives, momentum inversé)
+2. Si conditions fondamentales N'ONT PAS CHANGE, MAINTIENS tes recommandations
+3. Pour tout CHANGEMENT de position vs analyse précédente, EXPLIQUE CLAIREMENT pourquoi:
+   - Exemple: "Précédemment suggéré d'acheter NVDA, mais momentum a faibli (-5% cette semaine) → Passer à CONSERVER"
+4. FAVORISE la COHERENCE: Si tu as dit "acheter" et le ticker n'a pas bougé, ne change pas d'avis sans raison
+5. Évite les FLIP-FLOPS (acheter puis vendre puis acheter): Montre de la CONVICTION
+
+"""
 
     if positions:
         prompt += "\n### Positions detaillees\n"
@@ -719,7 +1007,7 @@ REGLES CRITIQUES:
 - achats_recommandes: SEULEMENT des achats haute conviction, budget total <= {budget} {budget_currency}. Pour chaque achat, calculer le NOMBRE D'ACTIONS recommande (nombre_actions) base sur le budget disponible et le prix d'entree.
 - ventes_recommandees: positions a liquider ou alleger avec urgence et raison
 - Chaque achat DOIT avoir un stop_loss (proteger le capital)
-- Considere les commissions ({buy_commission}+{sell_commission} {commission_currency}) dans la rentabilite
+- Considere les commissions ({commission_text}) dans la rentabilite{f" - Round-trip total: {total_roundtrip_pct:.2f}%. Objectif minimum: +{total_roundtrip_pct*2:.1f}% pour etre profitable" if total_roundtrip_pct > 0 else ""}
 - Ne recommande PAS d'acheter un ticker deja en portefeuille (utilise RENFORCER dans conseils_positions)
 - projections: % attendus si on suit tes recommandations (1 semaine, 1 mois, 1 an)
 - Priorise le momentum recent et les catalyseurs news

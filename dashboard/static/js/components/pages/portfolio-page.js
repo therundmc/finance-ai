@@ -606,36 +606,6 @@ export class PortfolioPage extends BaseComponent {
             <!-- Stats Block -->
             ${this._renderStats()}
 
-            <!-- Projections -->
-            ${this.portfolioAnalysis?.projections ? html`
-                <div class="stats-grid" style="margin-bottom: 8px;">
-                    <stat-card
-                        label="Proj. 1 sem"
-                        value="${(this.portfolioAnalysis.projections.expected_pnl_1w || 0).toFixed(1)}%"
-                        auto-color
-                        show-sign
-                        size="small"
-                        theme="${this.theme}"
-                    ></stat-card>
-                    <stat-card
-                        label="Proj. 1 mois"
-                        value="${(this.portfolioAnalysis.projections.expected_pnl_1m || 0).toFixed(1)}%"
-                        auto-color
-                        show-sign
-                        size="small"
-                        theme="${this.theme}"
-                    ></stat-card>
-                    <stat-card
-                        label="Proj. 1 an"
-                        value="${(this.portfolioAnalysis.projections.expected_pnl_1y || 0).toFixed(1)}%"
-                        auto-color
-                        show-sign
-                        size="small"
-                        theme="${this.theme}"
-                    ></stat-card>
-                </div>
-            ` : ''}
-
             <!-- Portfolio Chart -->
             <div class="chart-container">
                 <portfolio-chart

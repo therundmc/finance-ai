@@ -20,8 +20,9 @@ export class SectionToggleBtn extends BaseComponent {
     sharedStyles,
     css`
       :host {
-        flex: 1;
+        flex: 1 1 0%;
         display: block;
+        min-width: 0;
       }
 
       /* Removed sticky/fixed logic, let .main-section-toggle handle positioning */
