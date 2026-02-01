@@ -509,17 +509,23 @@ export class PortfolioAnalysisCard extends BaseComponent {
 
       .buy-item {
         display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 12px;
         background: rgba(6, 214, 160, 0.06);
         border-left: 3px solid var(--success);
         border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
       }
 
+      .buy-item-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
       .buy-ticker {
         font-weight: 800;
-        font-size: 0.9rem;
+        font-size: 0.95rem;
         color: var(--text-primary);
         min-width: 50px;
       }
@@ -543,21 +549,64 @@ export class PortfolioAnalysisCard extends BaseComponent {
         color: var(--warning, #f59e0b);
       }
 
-      .buy-levels {
-        font-size: 0.7rem;
-        font-family: 'JetBrains Mono', monospace;
-        color: var(--text-muted);
-        margin-left: auto;
-      }
-
       .buy-reason {
         font-size: 0.75rem;
         color: var(--text-secondary);
         flex: 1;
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      }
+
+      .buy-order-details {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        padding: 6px;
+        background: var(--bg-primary);
+        border-radius: var(--radius-sm);
+      }
+
+      .buy-detail-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .buy-detail-label {
+        font-size: 0.6rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        letter-spacing: 0.3px;
+      }
+
+      .buy-detail-value {
+        font-size: 0.8rem;
+        font-weight: 800;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-primary);
+      }
+
+      .buy-detail-value.entry {
+        color: var(--info, #3b82f6);
+      }
+
+      .buy-detail-value.sl {
+        color: var(--danger);
+      }
+
+      .buy-detail-value.tp {
+        color: var(--success);
+      }
+
+      .buy-detail-value.qty {
+        color: var(--text-primary);
+      }
+
+      .buy-levels {
+        font-size: 0.7rem;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-muted);
+        margin-left: auto;
       }
 
       /* Empty State */
@@ -706,7 +755,6 @@ export class PortfolioAnalysisCard extends BaseComponent {
       health_score,
       resume_global = {},
       plan_action = [],
-      achats_recommandes = [],
       ventes_recommandees = [],
       created_at
     } = this.analysis;
@@ -807,24 +855,6 @@ export class PortfolioAnalysisCard extends BaseComponent {
                       </div>
                     `;
                   })}
-                </div>
-              </div>
-            ` : ''}
-
-            <!-- Achats recommandés -->
-            ${achats_recommandes.length ? html`
-              <div class="section">
-                <div class="section-title">Achats recommandés</div>
-                <div class="buy-list">
-                  ${achats_recommandes.map(a => html`
-                    <div class="buy-item">
-                      <span class="buy-ticker">${a.ticker}</span>
-                      <span class="buy-conviction ${(a.conviction || '').toLowerCase()}">${a.conviction || ''}</span>
-                      ${a.nombre_actions ? html`<span class="buy-conviction moyenne" style="background: var(--bg-tertiary); color: var(--text-primary);">${a.nombre_actions}x</span>` : ''}
-                      <span class="buy-reason" title="${a.raison || ''}">${a.raison || ''}</span>
-                      <span class="buy-levels">${a.prix_entree ? `${a.prix_entree}$` : ''} ${a.stop_loss ? `SL:${a.stop_loss}$` : ''}</span>
-                    </div>
-                  `)}
                 </div>
               </div>
             ` : ''}

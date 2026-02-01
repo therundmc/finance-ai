@@ -1007,6 +1007,8 @@ REGLES CRITIQUES:
 - achats_recommandes: SEULEMENT des achats haute conviction, budget total <= {budget} {budget_currency}. Pour chaque achat, calculer le NOMBRE D'ACTIONS recommande (nombre_actions) base sur le budget disponible et le prix d'entree.
 - ventes_recommandees: positions a liquider ou alleger avec urgence et raison
 - Chaque achat DOIT avoir un stop_loss (proteger le capital)
+- IMPORTANT prix_entree: Calculer comme LIMIT ORDER = prix actuel + 0.3-0.5% pour eviter slippage (ex: prix actuel 130.00$ → prix_entree: 130.50$)
+- IMPORTANT objectif (take_profit): TOUJOURS specifier un objectif de prix cible (ex: si entree 130$, objectif 143$ = +10%)
 - Considere les commissions ({commission_text}) dans la rentabilite{f" - Round-trip total: {total_roundtrip_pct:.2f}%. Objectif minimum: +{total_roundtrip_pct*2:.1f}% pour etre profitable" if total_roundtrip_pct > 0 else ""}
 - Ne recommande PAS d'acheter un ticker deja en portefeuille (utilise RENFORCER dans conseils_positions)
 - projections: % attendus si on suit tes recommandations (1 semaine, 1 mois, 1 an)
